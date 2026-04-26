@@ -1,0 +1,20 @@
+FROM ruby:4-bookworm
+
+WORKDIR /app
+
+ENV PATH="/usr/local/bundle/bin:${PATH}"
+
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    build-essential \
+    default-libmysqlclient-dev \
+    default-mysql-client \
+    git \
+    pkg-config \
+    libyaml-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN gem install bundler --no-document \
+  && gem install rails -v '~> 8.1.0' --no-document
+
+CMD ["bash"]
