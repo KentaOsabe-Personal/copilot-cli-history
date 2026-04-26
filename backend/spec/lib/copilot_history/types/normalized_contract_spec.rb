@@ -1,0 +1,129 @@
+require "rails_helper"
+
+RSpec.describe "CopilotHistory normalized contracts" do
+  describe CopilotHistory::Types::NormalizedEvent do
+    it "retains canonical event fields and raw payload for unknown or partial events" do
+      event = described_class.new(
+        sequence: 7,
+        kind: :unknown,
+        raw_type: "mystery-event",
+        occurred_at: "2026-04-26T10:00:00Z",
+        role: nil,
+        content: nil,
+        raw_payload: { "type" => "mystery-event", "payload" => { "value" => 1 } }
+      )
+
+      expect(event.sequence).to eq(7)
+      expect(event.kind).to eq(:unknown)
+      expect(event.raw_type).to eq("mystery-event")
+      expect(event.occurred_at).to eq(Time.iso8601("2026-04-26T10:00:00Z"))
+      expect(event.raw_payload).to eq(
+        "type" => "mystery-event",
+        "payload" => { "value" => 1 }
+      )
+    end
+  end
+
+  describe CopilotHistory::Types::MessageSnapshot do
+    it "preserves supplemental transcript entries apart from canonical events" do
+      snapshot = described_class.new(
+        role: "user",
+        content: "show me recent sessions",
+        raw_payload: { "role" => "user", "content" => "show me recent sessions" }
+      )
+
+      expect(snapshot.role).to eq("user")
+      expect(snapshot.content).to eq("show me recent sessions")
+      expect(snapshot.raw_payload).to eq(
+        "role" => "user",
+        "content" => "show me recent sessions"
+      )
+    end
+  end
+
+  describe CopilotHistory::Types::NormalizationResult do
+    it "wraps one normalized event with any read issues emitted during mapping" do
+      event = CopilotHistory::Types::NormalizedEvent.new(
+        sequence: 2,
+        kind: :partial,
+        raw_type: "assistant_turn",
+        occurred_at: nil,
+        role: "assistant",
+        content: nil,
+        raw_payload: { "type" => "assistant_turn" }
+      )
+      issue = CopilotHistory::Types::ReadIssue.new(
+        code: CopilotHistory::Errors::ReadErrorCode::EVENT_PARTIAL_MAPPING,
+        message: "content is unavailable",
+        source_path: "/tmp/events.jsonl",
+        sequence: 2,
+        severity: :warning
+      )
+
+      result = described_class.new(event:, issues: [ issue ])
+
+      expect(result.event).to eq(event)
+      expect(result.issues).to eq([ issue ])
+    end
+  end
+
+  describe CopilotHistory::Types::NormalizedSession do
+    it "keeps canonical events separate from supplemental message snapshots" do
+      event = CopilotHistory::Types::NormalizedEvent.new(
+        sequence: 1,
+        kind: :message,
+        raw_type: "user_message",
+        occurred_at: "2026-04-26T10:00:00Z",
+        role: "user",
+        content: "open the latest session",
+        raw_payload: { "type" => "user_message" }
+      )
+      snapshot = CopilotHistory::Types::MessageSnapshot.new(
+        role: "assistant",
+        content: "Sure",
+        raw_payload: { "role" => "assistant", "content" => "Sure" }
+      )
+      issue = CopilotHistory::Types::ReadIssue.new(
+        code: CopilotHistory::Errors::ReadErrorCode::EVENT_UNKNOWN_SHAPE,
+        message: "one event was preserved as raw payload",
+        source_path: "/tmp/history.json",
+        sequence: 9,
+        severity: :warning
+      )
+
+      session = described_class.new(
+        session_id: "session-123",
+        source_format: :legacy,
+        cwd: "/repo",
+        git_root: "/repo",
+        repository: "example/repo",
+        branch: "main",
+        created_at: "2026-04-26T09:55:00Z",
+        updated_at: "2026-04-26T10:05:00Z",
+        selected_model: "gpt-5.4",
+        events: [ event ],
+        message_snapshots: [ snapshot ],
+        issues: [ issue ],
+        source_paths: {
+          source: "/tmp/history-session-state/session-123.json"
+        }
+      )
+
+      expect(session.session_id).to eq("session-123")
+      expect(session.source_format).to eq(:legacy)
+      expect(session.cwd).to eq(Pathname("/repo"))
+      expect(session.git_root).to eq(Pathname("/repo"))
+      expect(session.repository).to eq("example/repo")
+      expect(session.branch).to eq("main")
+      expect(session.created_at).to eq(Time.iso8601("2026-04-26T09:55:00Z"))
+      expect(session.updated_at).to eq(Time.iso8601("2026-04-26T10:05:00Z"))
+      expect(session.selected_model).to eq("gpt-5.4")
+      expect(session.events).to eq([ event ])
+      expect(session.message_snapshots).to eq([ snapshot ])
+      expect(session.issues).to eq([ issue ])
+      expect(session.source_paths).to eq(
+        source: Pathname("/tmp/history-session-state/session-123.json")
+      )
+    end
+  end
+end
