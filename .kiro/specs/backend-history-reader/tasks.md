@@ -50,25 +50,25 @@
   - _Boundary: LegacySessionReader_
   - _Depends: 1.2, 1.3, 3.1_
 
-- [ ] 4. 公開 entrypoint と observability を統合する
-- [ ] 4.1 SessionCatalogReader を公開 entrypoint として統合する
+- [x] 4. 公開 entrypoint と observability を統合する
+- [x] 4.1 SessionCatalogReader を公開 entrypoint として統合する
   - `HistoryRootResolver` → `SessionSourceCatalog` → current / legacy reader の順で orchestrate し、root failure 時は session 読取へ進まない。
   - root fatal は `ReadResult::Failure` に包み直し、成功時は current / legacy 混在の `NormalizedSession` 配列を `ReadResult::Success` として返す。
   - mixed root fixture から 1 回の呼び出しで両形式の session を返し、file-level issue が root failure に昇格しないことを確認できる。
   - _Requirements: 1.3, 3.4, 4.4, 5.1, 5.2_
-- [ ] 4.2 SessionCatalogReader 周辺で root failure と session issue のログ境界を実装する
+- [x] 4.2 SessionCatalogReader 周辺で root failure と session issue のログ境界を実装する
   - `session_id`, `source_format`, `source_path`, `issue_code`, `failure_code` を最低限含む structured log を出し分ける。
   - root failure は error 相当、session issue は warn 相当として扱い、partial success でも caller contract は変えない。
   - spec で fatal failure と partial issue の双方に必要 field と log level の差が現れることを確認できる。
   - _Requirements: 1.3, 2.3, 2.4, 3.3, 5.2_
 
-- [ ] 5. 統合検証で順序保持と実行環境差分の退行を防ぐ
-- [ ] 5.1 current / legacy 混在の integration spec を追加する
+- [x] 5. 統合検証で順序保持と実行環境差分の退行を防ぐ
+- [x] 5.1 current / legacy 混在の integration spec を追加する
   - mixed root fixture で current と legacy の両 session が同じ public contract へ収束することを検証する。
   - current line order と legacy timeline index が `NormalizedEvent.sequence` に反映され、unknown / partial event でも raw payload が残ることを観測する。
   - Docker mount 相当の absolute `COPILOT_HOME` でも成功経路が変わらない。
   - _Requirements: 2.2, 3.4, 4.1, 4.2, 4.3, 5.3_
-- [ ] 5.2 root failure と session issue の境界を回帰テストで固定する
+- [x] 5.2 root failure と session issue の境界を回帰テストで固定する
   - root missing / permission denied は `ReadFailure`、artifact unreadable / parse failure は `ReadIssue` として分離される。
   - sibling session を含む mixed fixture で一部 session の issue が他 session の読取を止めない。
   - 公開境界では raw `ReadFailure` が露出せず `ReadResult` union だけが返る。
