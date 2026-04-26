@@ -30,19 +30,19 @@
   - _Requirements: 1.4, 3.1, 5.1, 5.3_
 
 - [ ] 3. Current / legacy session を共通 contract へ正規化する
-- [ ] 3.1 EventNormalizer で known / partial / unknown event の共通写像を実装する
+- [x] 3.1 EventNormalizer で known / partial / unknown event の共通写像を実装する
   - known event から role・content・timestamp 等の共通項目を抽出し、partial mapping では共通項目と raw payload を併存させる。
   - unknown shape でも `kind: :unknown` の `NormalizedEvent` と issue が必ず返り、sequence は入力順のまま保持される。
   - unit spec で current / legacy の known・partial・unknown event が同じ `NormalizationResult` shape になる。
   - _Requirements: 4.1, 4.2, 4.3_
-- [ ] 3.2 (P) CurrentSessionReader で workspace.yaml と events.jsonl を単一 session に組み立てる
+- [x] 3.2 (P) CurrentSessionReader で workspace.yaml と events.jsonl を単一 session に組み立てる
   - `workspace.yaml` から session metadata を抽出し、`events.jsonl` は行順をそのまま canonical `events` として読み込む。
   - invalid YAML、invalid JSONL line、workspace unreadable、events unreadable を `ReadIssue` に落とし込み、読めた event は lossless に残す。
   - current fixture を読んだ結果として metadata・ordered events・issues を持つ `NormalizedSession` が返る。
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 5.2_
   - _Boundary: CurrentSessionReader_
   - _Depends: 1.2, 1.3, 3.1_
-- [ ] 3.3 (P) LegacySessionReader で legacy JSON を current と同じ session contract へ揃える
+- [x] 3.3 (P) LegacySessionReader で legacy JSON を current と同じ session contract へ揃える
   - `sessionId`, `startTime`, `selectedModel`, `timeline`, `chatMessages` を読み取り、`events` と `message_snapshots` に責務分離して格納する。
   - invalid JSON や source unreadable は session 局所の `ReadIssue` とし、unknown timeline entry でも raw payload を落とさない。
   - legacy fixture を読んだ結果として current と同型の `NormalizedSession` が返り、`chatMessages` は補助 transcript として保持される。
@@ -77,3 +77,5 @@
 ## Implementation Notes
 
 - permission denied 系の検証は copied fixture に対して mode を切り替え、チェックイン済み fixture 自体は変更しない。
+- `EventNormalizer` は `source_path` を initializer で受け取り、`call(raw_event:, source_format:, sequence:)` の契約を維持したまま `ReadIssue` に artifact path を載せる。
+- artifact unreadable の判定は `File.read` 例外待ちではなく mode bit を見る。Docker 内で root 実行だと `chmod 000` でも read が通るため。
