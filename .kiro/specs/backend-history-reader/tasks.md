@@ -17,13 +17,13 @@
   - fixture support を追加した状態で lib spec から履歴ファイルを raw source として読める。
   - _Requirements: 1.4, 2.3, 2.4, 3.3, 5.2, 5.3_
 
-- [ ] 2. Filesystem 境界で履歴ルートと source catalog を確立する
-- [ ] 2.1 HistoryRootResolver で履歴ルート解決と fatal failure 分類を実装する
+- [x] 2. Filesystem 境界で履歴ルートと source catalog を確立する
+- [x] 2.1 HistoryRootResolver で履歴ルート解決と fatal failure 分類を実装する
   - `COPILOT_HOME` 優先、未設定時 `~/.copilot` fallback、local filesystem 限定の判定を実装する。
   - missing root / unreadable root / permission denied を別 code の `ReadFailure` として返し、Docker mount 済み absolute path も通常 path と同じ成功経路を通す。
   - unit spec で env precedence、default fallback、missing root、permission denied を観測できる。
   - _Requirements: 1.1, 1.2, 1.3, 5.1, 5.2, 5.3_
-- [ ] 2.2 SessionSourceCatalog で current / legacy の raw source descriptor を列挙する
+- [x] 2.2 SessionSourceCatalog で current / legacy の raw source descriptor を列挙する
   - `session-state/<session-id>/` と `history-session-state/*.json` を raw source of truth として検出する。
   - descriptor に format、session_id、artifact path 群を保持し、reader が file-level issue を報告できる入力情報を揃える。
   - unit spec で current only、legacy only、mixed root の列挙結果が安定する。
