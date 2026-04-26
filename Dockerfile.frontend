@@ -1,0 +1,12 @@
+FROM node:24-bookworm
+
+WORKDIR /app
+
+ENV PNPM_HOME=/pnpm \
+    PNPM_STORE_DIR=/pnpm/store
+
+ENV PATH="${PNPM_HOME}:${PATH}"
+
+RUN npm install -g pnpm
+
+CMD ["bash"]

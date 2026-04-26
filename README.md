@@ -1,0 +1,32 @@
+# Copilot CLI Session History
+
+Docker ベースで frontend / backend / MySQL を起動する Phase 1 の開発環境です。
+
+| Service | Stack | Version line | Port |
+| --- | --- | --- | --- |
+| frontend | React + TypeScript + Vite + Vitest + Tailwind CSS | React 19.2 / TypeScript 6 / Node.js 24 / pnpm | 51730 |
+| backend | Rails API + RSpec | Ruby 4 / Rails 8.1 | 30000 |
+| db | MySQL | MySQL 9.7 | 33006 |
+
+## 起動
+
+```bash
+docker compose up --build
+```
+
+- frontend: http://localhost:51730
+- backend: http://localhost:30000
+- backend health: http://localhost:30000/up
+- mysql: `localhost:33006`
+
+## テスト
+
+```bash
+docker compose run --rm frontend pnpm test
+docker compose run --rm backend bundle exec rspec
+```
+
+## 補足
+
+- ルートの `Dockerfile.frontend` / `Dockerfile.backend` と `docker-compose.yml` を開発環境の正本とします。
+- backend は `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_TEST_NAME`, `DB_USERNAME`, `DB_PASSWORD` を使って MySQL に接続します。
