@@ -122,6 +122,37 @@ RSpec.describe CopilotHistory::EventNormalizer do
       end
     end
 
+    it "treats non-hash payloads as unknown events without raising" do
+      result = normalizer.call(
+        raw_event: [ "unexpected", { "value" => 42 } ],
+        source_format: :current,
+        sequence: 11
+      )
+
+      expect(result.event).to eq(
+        CopilotHistory::Types::NormalizedEvent.new(
+          sequence: 11,
+          kind: :unknown,
+          raw_type: "array",
+          occurred_at: nil,
+          role: nil,
+          content: nil,
+          raw_payload: [ "unexpected", { "value" => 42 } ]
+        )
+      )
+      expect(result.issues).to eq(
+        [
+          CopilotHistory::Types::ReadIssue.new(
+            code: CopilotHistory::Errors::ReadErrorCode::EVENT_UNKNOWN_SHAPE,
+            message: "event payload could not be mapped to canonical fields",
+            source_path: source_path,
+            sequence: 11,
+            severity: :warning
+          )
+        ]
+      )
+    end
+
     include_examples "a known normalized message", :current
     include_examples "a known normalized message", :legacy
     include_examples "a partially normalized message", :current

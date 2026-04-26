@@ -205,6 +205,39 @@ RSpec.describe CopilotHistory::SessionCatalogReader, :copilot_history do
       end
     end
 
+    it "wraps source catalog access failures in the public failure envelope" do
+      logger = instance_double(Logger, warn: nil, error: nil)
+
+      with_copilot_history_fixture("current_valid") do |root|
+        current_root = root.join("session-state")
+        ENV["COPILOT_HOME"] = root.to_s
+
+        expect(logger).to receive(:error).with(
+          hash_including(
+            session_id: nil,
+            source_format: nil,
+            source_path: current_root.to_s,
+            issue_code: nil,
+            failure_code: CopilotHistory::Errors::ReadErrorCode::ROOT_PERMISSION_DENIED
+          )
+        )
+
+        with_permission_denied(current_root) do
+          result = build_reader(logger: logger).call
+
+          expect(result).to eq(
+            CopilotHistory::Types::ReadResult::Failure.new(
+              failure: CopilotHistory::Types::ReadFailure.new(
+                code: CopilotHistory::Errors::ReadErrorCode::ROOT_PERMISSION_DENIED,
+                path: current_root,
+                message: "history source directory is not accessible"
+              )
+            )
+          )
+        end
+      end
+    end
+
     it "logs session issues as warn with structured fields while preserving the success contract" do
       logger = instance_double(Logger, warn: nil, error: nil)
 

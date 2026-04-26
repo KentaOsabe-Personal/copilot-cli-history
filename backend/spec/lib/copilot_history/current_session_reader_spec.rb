@@ -122,6 +122,41 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
       end
     end
 
+    it "keeps reading when a JSONL line parses into a non-hash payload" do
+      with_copilot_history_fixture("current_valid") do |root|
+        events_path = root.join("session-state/current-valid/events.jsonl")
+        events_path.write(<<~JSONL)
+          {"type":"user_message","role":"user","content":"show recent sessions","timestamp":"2026-04-26T09:00:01Z"}
+          {"type":"assistant_message","role":"assistant","content":"Here are the latest sessions.","timestamp":"2026-04-26T09:00:02Z"}
+          [1,2,3]
+        JSONL
+
+        session = described_class.new.call(build_source(root, "current-valid"))
+
+        expect(session.events.map(&:sequence)).to eq([ 1, 2, 3 ])
+        expect(session.events.last).to eq(
+          CopilotHistory::Types::NormalizedEvent.new(
+            sequence: 3,
+            kind: :unknown,
+            raw_type: "array",
+            occurred_at: nil,
+            role: nil,
+            content: nil,
+            raw_payload: [ 1, 2, 3 ]
+          )
+        )
+        expect(session.issues).to include(
+          CopilotHistory::Types::ReadIssue.new(
+            code: CopilotHistory::Errors::ReadErrorCode::EVENT_UNKNOWN_SHAPE,
+            message: "event payload could not be mapped to canonical fields",
+            source_path: events_path,
+            sequence: 3,
+            severity: :warning
+          )
+        )
+      end
+    end
+
     it "returns a session issue when workspace.yaml is unreadable but still keeps readable events" do
       with_copilot_history_fixture("current_unreadable") do |root|
         workspace_path = root.join("session-state/current-unreadable/workspace.yaml")

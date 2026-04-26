@@ -13,10 +13,10 @@ module CopilotHistory
         raise ArgumentError, "source_format must be one of: #{VALID_SOURCE_FORMATS.join(", ")}"
       end
 
-      payload = stringify_keys(raw_event)
-      raw_type = payload["type"].to_s
+      payload = normalize_payload(raw_event)
+      raw_type = extract_raw_type(payload, raw_event)
 
-      return unknown_result(payload:, raw_type:, sequence:) unless MESSAGE_TYPES.include?(raw_type)
+      return unknown_result(payload:, raw_type:, sequence:) unless payload.is_a?(Hash) && MESSAGE_TYPES.include?(raw_type)
 
       normalize_message(payload:, raw_type:, sequence:)
     end
@@ -91,6 +91,16 @@ module CopilotHistory
       raw_event.each_with_object({}) do |(key, value), normalized|
         normalized[key.to_s] = value
       end
+    end
+
+    def normalize_payload(raw_event)
+      raw_event.is_a?(Hash) ? stringify_keys(raw_event) : raw_event
+    end
+
+    def extract_raw_type(payload, raw_event)
+      return payload["type"].to_s if payload.is_a?(Hash)
+
+      raw_event.class.name.downcase
     end
 
     def presence(value)

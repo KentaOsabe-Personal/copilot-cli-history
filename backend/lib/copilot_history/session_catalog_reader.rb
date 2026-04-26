@@ -25,6 +25,8 @@ module CopilotHistory
       log_session_issues(sessions)
 
       CopilotHistory::Types::ReadResult::Success.new(root: resolved_root, sessions: sessions)
+    rescue CopilotHistory::SessionSourceCatalog::SourceAccessError => error
+      root_failure_result(error.failure)
     end
 
     private
