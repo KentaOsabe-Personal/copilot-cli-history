@@ -46,7 +46,7 @@
   - _Boundary: SessionDetailPresenter_
   - _Depends: 1.1, 1.2_
 
-- [ ] 3. SessionsController と route で read-only session endpoint を公開する
+- [x] 3. SessionsController と route で read-only session endpoint を公開する
   - `GET /api/sessions` と `GET /api/sessions/:id` だけを route に追加し、POST / PATCH / DELETE や検索系 endpoint を増やさない。
   - controller は index / show で query result を success / not found / root failure に case 分岐し、presenter と status だけを選択する。
   - request spec から到達したときに error envelope と success payload の shape が list / detail で一貫し、controller が reader object を直接 render しない。
