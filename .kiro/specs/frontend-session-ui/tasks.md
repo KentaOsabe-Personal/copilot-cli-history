@@ -12,35 +12,35 @@
   - 上位 hook が backend の生 status 分岐を持たずに list/detail を呼べる状態になる。
   - _Requirements: 1.1, 2.2, 2.5, 4.3_
 
-- [ ] 2. Core: page-local state と timeline 読解モデルを分離して実装する
-- [ ] 2.1 (P) 一覧画面の loading / empty / success / error 状態機械を閉じ込める
+- [x] 2. Core: page-local state と timeline 読解モデルを分離して実装する
+- [x] 2.1 (P) 一覧画面の loading / empty / success / error 状態機械を閉じ込める
   - mount 時に一覧取得を開始し、空配列を empty として success から分離する。
   - backend が返した順序を保った `sessions` と `meta` を success state に渡す。
   - UI 側が HTTP を知らずに 4 状態を描き分けられる状態になる。
   - _Requirements: 1.1, 1.3, 1.4, 4.3_
   - _Boundary: useSessionIndex_
   - _Depends: 1.2_
-- [ ] 2.2 (P) 詳細画面の loading / success / not_found / error 状態機械を route param 駆動で管理する
+- [x] 2.2 (P) 詳細画面の loading / success / not_found / error 状態機械を route param 駆動で管理する
   - `sessionId` 変更時に in-flight request を abort し、遅延 response が現在の画面を上書きしないようにする。
   - 404 は not_found、5xx / network / config は error として切り分ける。
   - degraded detail は success state のまま issue と badge 表示へ渡せる状態になる。
   - _Requirements: 2.2, 2.3, 2.5, 4.1, 4.2, 4.3_
   - _Boundary: useSessionDetail_
   - _Depends: 1.2_
-- [ ] 2.3 (P) タイムライン本文を text / code / tool hint の表示ブロックへ分解する
+- [x] 2.3 (P) タイムライン本文を text / code / tool hint の表示ブロックへ分解する
   - fenced code を本文順のまま抽出し、改行と空白を保持した block として返す。
   - 認識済みの構造化 hint だけを tool hint block にし、未知 schema は plain text fallback を維持する。
   - partial / unknown event でも表示可能な本文が消えず、通常本文と tool/code を見分けられる状態になる。
   - _Requirements: 3.2, 3.3, 3.4_
   - _Boundary: TimelineContent, timelineContent_
-- [ ] 2.4 (P) loading / empty / not_found / error の共有 status panel を実装する
+- [x] 2.4 (P) loading / empty / not_found / error の共有 status panel を実装する
   - 一覧と詳細で loading / empty / not_found / error を success 表示と誤認しない文言と見た目に揃える。
   - not_found と error panel から一覧へ戻る link を辿れるようにする。
   - panel 単体で各失敗・空状態を表現できる状態になる。
   - _Requirements: 1.3, 1.4, 2.3, 2.5, 4.3_
   - _Boundary: StatusPanel_
   - _Depends: 1.1_
-- [ ] 2.5 (P) session metadata と issue 補助情報の表示整形ルールを固定する
+- [x] 2.5 (P) session metadata と issue 補助情報の表示整形ルールを固定する
   - null timestamp、missing work context、missing model を安定した placeholder text に整形する。
   - issue の severity / scope / event sequence を利用者が読める補助ラベルへ変換する。
   - 一覧カード、詳細 header、issue 表示が欠損 field を含んでも意味を保って描画できる状態になる。
