@@ -48,12 +48,9 @@ module CopilotHistory
       end
     end
 
-    def log_payload(session_id: nil, source_format: nil, source_path: nil, issue_code: nil, failure_code: nil)
+    def log_payload(source_path: nil, failure_code: nil)
       {
-        session_id: session_id,
-        source_format: source_format,
         source_path: source_path&.to_s,
-        issue_code: issue_code,
         failure_code: failure_code
       }
     end

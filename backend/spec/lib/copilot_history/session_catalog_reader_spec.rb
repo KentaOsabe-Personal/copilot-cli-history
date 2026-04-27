@@ -158,10 +158,7 @@ RSpec.describe CopilotHistory::SessionCatalogReader, :copilot_history do
 
         expect(logger).to receive(:error).with(
           hash_including(
-            session_id: nil,
-            source_format: nil,
             source_path: expected_path.to_s,
-            issue_code: nil,
             failure_code: CopilotHistory::Errors::ReadErrorCode::ROOT_MISSING
           )
         )
@@ -214,10 +211,7 @@ RSpec.describe CopilotHistory::SessionCatalogReader, :copilot_history do
 
         expect(logger).to receive(:error).with(
           hash_including(
-            session_id: nil,
-            source_format: nil,
             source_path: current_root.to_s,
-            issue_code: nil,
             failure_code: CopilotHistory::Errors::ReadErrorCode::ROOT_PERMISSION_DENIED
           )
         )

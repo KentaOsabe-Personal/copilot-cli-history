@@ -37,6 +37,7 @@ export function useSessionDetail(
 ): UseSessionDetailResult {
   const client = options.client ?? sessionApiClient
   const [settledState, setSettledState] = useState<{
+    client: SessionApiClient
     sessionId: string
     state: SettledSessionDetailState
   } | null>(null)
@@ -52,6 +53,7 @@ export function useSessionDetail(
 
       if (result.status === 'success') {
         setSettledState({
+          client,
           sessionId,
           state: {
             status: 'success',
@@ -64,6 +66,7 @@ export function useSessionDetail(
 
       if (result.error.kind === 'not_found') {
         setSettledState({
+          client,
           sessionId,
           state: {
             status: 'not_found',
@@ -74,6 +77,7 @@ export function useSessionDetail(
       }
 
       setSettledState({
+        client,
         sessionId,
         state: {
           status: 'error',
@@ -89,7 +93,7 @@ export function useSessionDetail(
     }
   }, [client, sessionId])
 
-  if (settledState == null || settledState.sessionId !== sessionId) {
+  if (settledState == null || settledState.client !== client || settledState.sessionId !== sessionId) {
     return {
       state: {
         status: 'loading',

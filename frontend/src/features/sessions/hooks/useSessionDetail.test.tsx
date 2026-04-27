@@ -209,4 +209,58 @@ describe('useSessionDetail', () => {
       }),
     )
   })
+
+  it('returns to loading when the client changes for the same session id', async () => {
+    const clientARequest = deferred<SessionApiResult<SessionDetailResponse>>()
+    const clientBRequest = deferred<SessionApiResult<SessionDetailResponse>>()
+    const clientA = createClient(vi.fn<SessionApiClient['fetchSessionDetail']>(() => clientARequest.promise))
+    const clientB = createClient(vi.fn<SessionApiClient['fetchSessionDetail']>(() => clientBRequest.promise))
+
+    const { rerender } = render(<StateProbe client={clientA} sessionId="session-123" />)
+
+    clientARequest.resolve({
+      status: 'success',
+      data: buildDetail('session-123'),
+    })
+
+    await waitFor(() =>
+      expect(readState()).toEqual({
+        status: 'success',
+        sessionId: 'session-123',
+        detail: buildDetail('session-123').data,
+      }),
+    )
+
+    rerender(<StateProbe client={clientB} sessionId="session-123" />)
+
+    expect(readState()).toEqual({
+      status: 'loading',
+      sessionId: 'session-123',
+    })
+
+    clientBRequest.resolve({
+      status: 'error',
+      error: {
+        kind: 'backend',
+        httpStatus: 503,
+        code: 'service_unavailable',
+        message: 'service unavailable',
+        details: {},
+      },
+    })
+
+    await waitFor(() =>
+      expect(readState()).toEqual({
+        status: 'error',
+        sessionId: 'session-123',
+        error: {
+          kind: 'backend',
+          httpStatus: 503,
+          code: 'service_unavailable',
+          message: 'service unavailable',
+          details: {},
+        },
+      }),
+    )
+  })
 })
