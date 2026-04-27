@@ -22,8 +22,6 @@ module CopilotHistory
         read_session(source)
       end
 
-      log_session_issues(sessions)
-
       CopilotHistory::Types::ReadResult::Success.new(root: resolved_root, sessions: sessions)
     rescue CopilotHistory::SessionSourceCatalog::SourceAccessError => error
       root_failure_result(error.failure)
@@ -47,21 +45,6 @@ module CopilotHistory
         legacy_session_reader.call(source)
       else
         raise ArgumentError, "unsupported session source format: #{source.format.inspect}"
-      end
-    end
-
-    def log_session_issues(sessions)
-      sessions.each do |session|
-        session.issues.each do |issue|
-          logger&.warn(
-            log_payload(
-              session_id: session.session_id,
-              source_format: session.source_format,
-              source_path: issue.source_path,
-              issue_code: issue.code
-            )
-          )
-        end
       end
     end
 

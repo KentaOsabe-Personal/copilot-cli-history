@@ -238,29 +238,46 @@ RSpec.describe CopilotHistory::SessionCatalogReader, :copilot_history do
       end
     end
 
-    it "logs session issues as warn with structured fields while preserving the success contract" do
+    it "keeps session issues in the result without logging them" do
       logger = instance_double(Logger, warn: nil, error: nil)
 
       with_copilot_history_fixture("mixed_root") do |root|
         workspace_path = root.join("session-state/current-mixed/workspace.yaml")
         ENV["COPILOT_HOME"] = root.to_s
 
-        expect(logger).to receive(:warn).with(
-          hash_including(
-            session_id: "current-mixed",
-            source_format: :current,
-            source_path: workspace_path.to_s,
-            issue_code: CopilotHistory::Errors::ReadErrorCode::CURRENT_WORKSPACE_UNREADABLE,
-            failure_code: nil
-          )
-        )
+        expect(logger).not_to receive(:warn)
 
         with_permission_denied(workspace_path) do
           result = build_reader(logger: logger).call
 
           expect(result).to be_a(CopilotHistory::Types::ReadResult::Success)
           expect(result.sessions.map(&:session_id)).to eq(%w[current-mixed legacy-mixed])
+          expect(result.sessions.find { |session| session.session_id == "current-mixed" }.issues).to include(
+            CopilotHistory::Types::ReadIssue.new(
+              code: CopilotHistory::Errors::ReadErrorCode::CURRENT_WORKSPACE_UNREADABLE,
+              message: "workspace.yaml is not accessible",
+              source_path: workspace_path,
+              severity: :error
+            )
+          )
         end
+      end
+    end
+
+    it "does not log warning-only session issues while preserving them in the result" do
+      logger = instance_double(Logger, warn: nil, error: nil)
+
+      with_copilot_history_fixture("mixed_root") do |root|
+        ENV["COPILOT_HOME"] = root.to_s
+
+        expect(logger).not_to receive(:warn)
+
+        result = build_reader(logger: logger).call
+
+        expect(result).to be_a(CopilotHistory::Types::ReadResult::Success)
+        expect(result.sessions.flat_map(&:issues).map(&:code)).to include(
+          CopilotHistory::Errors::ReadErrorCode::EVENT_UNKNOWN_SHAPE
+        )
       end
     end
 

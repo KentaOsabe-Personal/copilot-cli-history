@@ -76,21 +76,21 @@
   - _Requirements: 2.2, 2.3, 2.4, 2.5, 4.3, 4.4_
   - _Depends: 2.2, 2.4, 3.2, 3.3_
 
-- [ ] 4. Validation: API 正規化と route UI の回帰を固定する
-- [ ] 4.1 (P) API client・timeline helper・formatters の単体テストを追加する
+- [x] 4. Validation: API 正規化と route UI の回帰を固定する
+- [x] 4.1 (P) API client・timeline helper・formatters の単体テストを追加する
   - 200 / 404 / 503 / config / network の正規化結果を固定する。
   - fenced code、recognized tool hint、unknown hint fallback、欠損 metadata の表示整形を固定する。
   - API と表示 helper の退行が unit test で検知できる状態になる。
   - _Requirements: 1.2, 2.5, 3.3, 3.4, 4.2, 4.3_
   - _Boundary: SessionApiClient, TimelineContent, formatters_
   - _Depends: 1.2, 2.3, 2.5_
-- [ ] 4.2 一覧・詳細 route の状態遷移と導線を検証する
+- [x] 4.2 一覧・詳細 route の状態遷移と導線を検証する
   - 一覧で loading / empty / success / error が切り替わり、degraded badge と detail navigation が見えることを確認する。
   - 詳細 direct URL で success / not_found / error / degraded success を描き分け、一覧へ戻る link が機能することを確認する。
   - 一覧・詳細とも閲覧専用のままで、検索・絞り込み・再読み込み・自動更新の操作 UI を持たないことを確認できる。
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 2.5, 4.1, 4.3, 4.4_
   - _Depends: 3.1, 3.4_
-- [ ] 4.3 タイムライン表示差分と stale response 回帰を検証する
+- [x] 4.3 タイムライン表示差分と stale response 回帰を検証する
   - tool hint / code block / partial / unknown event の表示差分を route 上で確認する。
   - route param 連続変更時に遅延した旧 response が現在の session 表示を上書きしないことを確認する。
   - event-level issue を含む detail が順序を崩さず描画され、timeline 読解支援の回帰が検知できる状態になる。

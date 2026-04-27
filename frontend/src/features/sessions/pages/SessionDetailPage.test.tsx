@@ -78,6 +78,23 @@ function buildDetail(overrides: Partial<SessionDetail> = {}): SessionDetail {
           },
         ],
       },
+      {
+        sequence: 3,
+        kind: 'unknown',
+        raw_type: 'mystery_event',
+        occurred_at: '2026-04-26T09:00:03Z',
+        role: null,
+        content: 'unknown payload stays readable',
+        raw_payload: {
+          toolRequests: [
+            {
+              label: 'write_bash',
+            },
+          ],
+        },
+        degraded: false,
+        issues: [],
+      },
     ],
     ...overrides,
   }
@@ -137,6 +154,32 @@ describe('SessionDetailPage', () => {
     expect(screen.getByText('bash')).toBeInTheDocument()
     expect(screen.getByText('partial payload remains readable')).toBeInTheDocument()
     expect(screen.getByText('event payload is partial')).toBeInTheDocument()
+  })
+
+  it('keeps tool, code, partial, and unknown timeline events readable in sequence order', () => {
+    mockedUseSessionDetail.mockReturnValue({
+      state: {
+        status: 'success',
+        sessionId: 'session-123',
+        detail: buildDetail(),
+      },
+    })
+
+    renderDetailPage()
+
+    expect(screen.getAllByRole('heading', { level: 4 }).map((node) => node.textContent)).toEqual([
+      'イベント #1',
+      'イベント #2',
+      'イベント #3',
+    ])
+    expect(screen.getByText('message')).toBeInTheDocument()
+    expect(screen.getByText('partial')).toBeInTheDocument()
+    expect(screen.getByText('unknown')).toBeInTheDocument()
+    expect(screen.getByText('const answer = 42')).toBeInTheDocument()
+    expect(screen.getByText('bash')).toBeInTheDocument()
+    expect(screen.getByText('partial payload remains readable')).toBeInTheDocument()
+    expect(screen.getByText('unknown payload stays readable')).toBeInTheDocument()
+    expect(screen.queryByText('write_bash')).not.toBeInTheDocument()
   })
 
   it('renders a dedicated not found panel with a link back to the index', () => {

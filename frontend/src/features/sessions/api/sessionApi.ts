@@ -17,7 +17,7 @@ interface CreateSessionApiClientOptions {
 export function createSessionApiClient(
   options: CreateSessionApiClientOptions = {},
 ): SessionApiClient {
-  const fetchImpl = options.fetchImpl ?? fetch
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis)
   const env = options.env
 
   return {
