@@ -18,6 +18,7 @@ docker compose up --build
 - backend: http://localhost:30000
 - backend health: http://localhost:30000/up
 - mysql: `localhost:33006`
+- backend はホストの `~/.copilot` を read-only で `/copilot-home` にマウントし、`COPILOT_HOME=/copilot-home` で会話履歴を参照します。
 
 ## テスト
 

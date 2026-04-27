@@ -54,13 +54,13 @@
   - _Boundary: Api::SessionsController_
   - _Depends: 2.1, 2.2, 2.3, 2.4_
 
-- [ ] 4. API request contract の回帰を固定する
-- [ ] 4.1 一覧 endpoint の success / degraded success / root failure を検証する
+- [x] 4. API request contract の回帰を固定する
+- [x] 4.1 一覧 endpoint の success / degraded success / root failure を検証する
   - mixed current / legacy fixture で一覧が単一 schema と deterministic order を返す。
   - session 局所 issue があるとき 200 + `degraded` / `issues` で識別でき、root failure 時は空配列ではなく 503 envelope を返す。
   - request spec で `data`, `meta.count`, `meta.partial_results` と root failure code の境界が観測できる。
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 3.1, 3.2, 3.4, 4.1, 4.2_
-- [ ] 4.2 セッション詳細 endpoint の timeline / not found / degraded event を検証する
+- [x] 4.2 セッション詳細 endpoint の timeline / not found / degraded event を検証する
   - found case で header, `message_snapshots`, `timeline` が単一 response にまとまり、event order が保持される。
   - unknown / partial event が `raw_payload`, `degraded`, event-level `issues` を持ち、`session_not_found` は 404 + `details.session_id` で root failure と区別される。
   - request spec で detail endpoint が read-only contract の範囲に留まり、検索・永続化前提の field や endpoint を増やしていないことが確認できる。
