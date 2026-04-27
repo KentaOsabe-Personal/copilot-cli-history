@@ -1,0 +1,177 @@
+import { render, screen, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+
+import type {
+  SessionApiClient,
+  SessionApiResult,
+  SessionDetailResponse,
+  SessionIndexResponse,
+} from '../api/sessionApi.types.ts'
+import { useSessionIndex } from './useSessionIndex.ts'
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve
+  })
+
+  return { promise, resolve }
+}
+
+function createClient(fetchSessionIndex: SessionApiClient['fetchSessionIndex']): SessionApiClient {
+  return {
+    fetchSessionIndex,
+    fetchSessionDetail: vi.fn<
+      SessionApiClient['fetchSessionDetail']
+    >(async (): Promise<SessionApiResult<SessionDetailResponse>> => {
+      throw new Error('fetchSessionDetail should not be called in useSessionIndex tests')
+    }),
+  }
+}
+
+function StateProbe({ client }: { client: SessionApiClient }) {
+  const { state } = useSessionIndex({ client })
+
+  return <pre data-testid="state">{JSON.stringify(state)}</pre>
+}
+
+function readState() {
+  return JSON.parse(screen.getByTestId('state').textContent ?? 'null')
+}
+
+describe('useSessionIndex', () => {
+  it('starts in loading and transitions to success without reordering sessions', async () => {
+    const request = deferred<SessionApiResult<SessionIndexResponse>>()
+    const fetchSessionIndex = vi.fn<SessionApiClient['fetchSessionIndex']>(() => request.promise)
+    const client = createClient(fetchSessionIndex)
+
+    render(<StateProbe client={client} />)
+
+    expect(readState()).toEqual({ status: 'loading' })
+
+    const payload: SessionIndexResponse = {
+      data: [
+        {
+          id: 'session-b',
+          source_format: 'current',
+          created_at: '2026-04-26T10:00:00Z',
+          updated_at: '2026-04-26T10:05:00Z',
+          work_context: {
+            cwd: '/workspace/session-b',
+            git_root: '/workspace/session-b',
+            repository: 'octo/example',
+            branch: 'feature/b',
+          },
+          selected_model: 'gpt-5.4',
+          event_count: 3,
+          message_snapshot_count: 1,
+          degraded: false,
+          issues: [],
+        },
+        {
+          id: 'session-a',
+          source_format: 'legacy',
+          created_at: '2026-04-26T08:00:00Z',
+          updated_at: null,
+          work_context: {
+            cwd: null,
+            git_root: null,
+            repository: null,
+            branch: null,
+          },
+          selected_model: null,
+          event_count: 1,
+          message_snapshot_count: 0,
+          degraded: true,
+          issues: [],
+        },
+      ],
+      meta: {
+        count: 2,
+        partial_results: true,
+      },
+    }
+
+    request.resolve({ status: 'success', data: payload })
+
+    await waitFor(() =>
+      expect(readState()).toEqual({
+        status: 'success',
+        sessions: payload.data,
+        meta: payload.meta,
+      }),
+    )
+    expect(fetchSessionIndex).toHaveBeenCalledTimes(1)
+  })
+
+  it('separates an empty response from success', async () => {
+    const fetchSessionIndex = vi.fn<SessionApiClient['fetchSessionIndex']>(async () => ({
+      status: 'success',
+      data: {
+        data: [],
+        meta: {
+          count: 0,
+          partial_results: false,
+        },
+      },
+    }))
+    const client = createClient(fetchSessionIndex)
+
+    render(<StateProbe client={client} />)
+
+    await waitFor(() => expect(readState()).toEqual({ status: 'empty' }))
+  })
+
+  it('exposes backend and network/config failures as an error state', async () => {
+    const fetchSessionIndex = vi.fn<SessionApiClient['fetchSessionIndex']>(async () => ({
+      status: 'error',
+      error: {
+        kind: 'backend',
+        httpStatus: 503,
+        code: 'root_missing',
+        message: 'history root does not exist',
+        details: {
+          path: '/tmp/.copilot',
+        },
+      },
+    }))
+    const client = createClient(fetchSessionIndex)
+
+    render(<StateProbe client={client} />)
+
+    await waitFor(() =>
+      expect(readState()).toEqual({
+        status: 'error',
+        error: {
+          kind: 'backend',
+          httpStatus: 503,
+          code: 'root_missing',
+          message: 'history root does not exist',
+          details: {
+            path: '/tmp/.copilot',
+          },
+        },
+      }),
+    )
+  })
+
+  it('aborts the in-flight request when the hook unmounts', () => {
+    let observedSignal: AbortSignal | undefined
+    const request = deferred<SessionApiResult<SessionIndexResponse>>()
+    const fetchSessionIndex = vi.fn<SessionApiClient['fetchSessionIndex']>((signal) => {
+      observedSignal = signal
+
+      return request.promise
+    })
+    const client = createClient(fetchSessionIndex)
+
+    const { unmount } = render(<StateProbe client={client} />)
+
+    expect(observedSignal?.aborted).toBe(false)
+
+    unmount()
+
+    expect(observedSignal?.aborted).toBe(true)
+  })
+})

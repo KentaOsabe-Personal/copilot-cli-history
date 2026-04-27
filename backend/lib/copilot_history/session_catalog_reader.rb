@@ -22,8 +22,6 @@ module CopilotHistory
         read_session(source)
       end
 
-      log_session_issues(sessions)
-
       CopilotHistory::Types::ReadResult::Success.new(root: resolved_root, sessions: sessions)
     rescue CopilotHistory::SessionSourceCatalog::SourceAccessError => error
       root_failure_result(error.failure)
@@ -50,27 +48,9 @@ module CopilotHistory
       end
     end
 
-    def log_session_issues(sessions)
-      sessions.each do |session|
-        session.issues.each do |issue|
-          logger&.warn(
-            log_payload(
-              session_id: session.session_id,
-              source_format: session.source_format,
-              source_path: issue.source_path,
-              issue_code: issue.code
-            )
-          )
-        end
-      end
-    end
-
-    def log_payload(session_id: nil, source_format: nil, source_path: nil, issue_code: nil, failure_code: nil)
+    def log_payload(source_path: nil, failure_code: nil)
       {
-        session_id: session_id,
-        source_format: source_format,
         source_path: source_path&.to_s,
-        issue_code: issue_code,
         failure_code: failure_code
       }
     end
