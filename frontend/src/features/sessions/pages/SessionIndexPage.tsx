@@ -1,10 +1,39 @@
+import SessionList from '../components/SessionList.tsx'
+import StatusPanel from '../components/StatusPanel.tsx'
+import { useSessionIndex } from '../hooks/useSessionIndex.ts'
+
 function SessionIndexPage() {
+  const { state } = useSessionIndex()
+
   return (
-    <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-8">
+    <section className="flex flex-col gap-6">
       <h2 className="text-2xl font-semibold text-white">セッション一覧</h2>
-      <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-300">
-        一覧 route の境界を有効化しました。セッションの取得と要約カード表示は後続タスクでこのページに接続します。
-      </p>
+
+      {state.status === 'loading' ? (
+        <StatusPanel
+          variant="loading"
+          title="セッション一覧を読み込んでいます"
+          message="保存済みセッションを確認しています。"
+        />
+      ) : null}
+
+      {state.status === 'empty' ? (
+        <StatusPanel
+          variant="empty"
+          title="セッションがありません"
+          message="表示できるセッションはありません。"
+        />
+      ) : null}
+
+      {state.status === 'error' ? (
+        <StatusPanel
+          variant="error"
+          title="セッション一覧を表示できません"
+          message="一覧の取得に失敗しました。時間をおいて再度開いてください。"
+        />
+      ) : null}
+
+      {state.status === 'success' ? <SessionList sessions={state.sessions} /> : null}
     </section>
   )
 }

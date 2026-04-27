@@ -47,29 +47,29 @@
   - _Requirements: 1.2, 3.2, 4.2_
   - _Boundary: formatters_
 
-- [ ] 3. Integration: 一覧画面と詳細画面を UI として接続する
-- [ ] 3.1 (P) 一覧画面で session card 一覧と degraded 表示を組み立てる
+- [x] 3. Integration: 一覧画面と詳細画面を UI として接続する
+- [x] 3.1 (P) 一覧画面で session card 一覧と degraded 表示を組み立てる
   - state に応じて status panel か session list を切り替え、backend order のまま cards を描画する。
   - 各 card に session ID、更新日時、work context、selected model、degraded 状態を表示する。
   - session card を選ぶと対象 detail route へ遷移し、閲覧専用の一覧画面として成立する状態になる。
   - _Requirements: 1.1, 1.2, 2.1, 4.1, 4.3, 4.4_
   - _Boundary: SessionIndexPage, SessionList, SessionSummaryCard_
   - _Depends: 2.1, 2.4, 2.5_
-- [ ] 3.2 (P) 詳細 header と session-level issue 説明を実装する
+- [x] 3.2 (P) 詳細 header と session-level issue 説明を実装する
   - session metadata と degraded badge を header に表示し、不完全な履歴であることを詳細画面から識別できるようにする。
   - session-level issue を message / scope / severity 付きで並べ、セッション全体への影響範囲を読み取れるようにする。
   - issue を含む session を開いたとき、詳細 header と issue 表示だけで session 単位の欠落範囲が観測できる状態になる。
   - _Requirements: 4.1, 4.2_
   - _Boundary: SessionDetailHeader, IssueList_
   - _Depends: 2.5_
-- [ ] 3.3 (P) 詳細タイムラインで event 単位の読解情報を描き分ける
+- [x] 3.3 (P) 詳細タイムラインで event 単位の読解情報を描き分ける
   - detail payload の配列順と `sequence` を一致させた timeline を描画する。
   - 各 event に kind、role、sequence または時刻、本文 block を区別して表示する。
   - tool hint block、code block、partial / unknown event、event-level issue が通常本文と異なる見え方で読める状態になる。
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 4.2_
   - _Boundary: SessionTimeline, TimelineEntry, IssueList_
   - _Depends: 2.3, 2.5, 3.2_
-- [ ] 3.4 詳細画面で state 分岐、戻る導線、timeline 統合を完了する
+- [x] 3.4 詳細画面で state 分岐、戻る導線、timeline 統合を完了する
   - direct URL で詳細を開いたときも hook の状態に応じて success / not_found / error を切り替える。
   - 詳細画面から一覧へ戻る導線を明確に出し、not_found と error でも一覧基点へ戻れるようにする。
   - 詳細 URL 直打ちでも header、issue、timeline を含む読取専用画面として成立する状態になる。
