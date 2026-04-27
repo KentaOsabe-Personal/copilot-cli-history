@@ -17,28 +17,28 @@
   - presenter spec で `ReadFailure.code` の透過と `details.path` / `details.session_id` の出し分けが観測できる。
   - _Requirements: 2.4, 3.1, 3.4_
 
-- [ ] 2. Core: list/detail query と payload presenter を並行実装する
-- [ ] 2.1 (P) セッション一覧 query で reader 結果を deterministic order に整える
+- [x] 2. Core: list/detail query と payload presenter を並行実装する
+- [x] 2.1 (P) セッション一覧 query で reader 結果を deterministic order に整える
   - `SessionCatalogReader` を request ごとに 1 回だけ呼び、root failure はそのまま返す。
   - success 時は `updated_at || created_at || Time.at(0)` の降順と `session_id` 昇順で current / legacy 混在一覧を安定ソートする。
   - lib spec で mixed fixture が同一一覧に残り、一部 session の issue が success から落ちないことを観測できる。
   - _Requirements: 1.1, 1.3, 3.1_
   - _Boundary: SessionIndexQuery_
-- [ ] 2.2 (P) セッション詳細 query で exact match と not found を分岐する
+- [x] 2.2 (P) セッション詳細 query で exact match と not found を分岐する
   - `SessionCatalogReader` を request ごとに 1 回だけ呼び、success から exact `session_id` match を 1 件だけ抽出する。
   - 見つからない場合は API 固有 union の `NotFound` を返し、root failure と混同しない。
   - lib spec で found / not found / root failure が HTTP status を持たない query result として固定される。
   - _Requirements: 2.1, 2.4, 3.1_
   - _Boundary: SessionDetailQuery_
   - _Depends: 1.1_
-- [ ] 2.3 (P) 一覧 presenter で current / legacy 共通 summary schema を組み立てる
+- [x] 2.3 (P) 一覧 presenter で current / legacy 共通 summary schema を組み立てる
   - 固定 key の `work_context`、nullable `selected_model`、件数 field、`degraded` を含む session summary を返す。
   - event 由来 issue も共通 issue schema のまま一覧 payload に残し、一覧返却を継続できるようにする。
   - presenter spec で current / legacy の欠落 field が `null` または空配列に揃い、`meta.count` と `meta.partial_results` が観測できる。
   - _Requirements: 1.1, 1.2, 1.3, 4.1, 4.2_
   - _Boundary: SessionIndexPresenter_
   - _Depends: 1.2_
-- [ ] 2.4 (P) 詳細 presenter で header・message snapshots・timeline を整形する
+- [x] 2.4 (P) 詳細 presenter で header・message snapshots・timeline を整形する
   - timeline は reader の `sequence` 順を変えず、各 event に `kind`, `raw_type`, `content`, `raw_payload`, `degraded`, `issues` を揃えて返す。
   - session-level issue は header 側、event-level issue は該当 sequence の event 側へ再配置し、legacy `message_snapshots` は補助情報として分離する。
   - presenter spec で unknown / partial event の raw payload と issue grouping が保持され、current では `message_snapshots` が空配列になることを観測できる。
