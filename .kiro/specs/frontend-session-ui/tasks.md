@@ -1,0 +1,98 @@
+# 実装タスク
+
+- [x] 1. Foundation: ルーティング境界と API 契約の土台を整える
+- [x] 1.1 BrowserRouter ベースの route host と共通 read-only shell を導入する
+  - `react-router` の runtime 依存を追加し、`/` と `/sessions/:sessionId` の 2 route だけをこの feature の owned path として宣言する。
+  - 共通 shell に一覧へ戻る恒常導線を置き、閲覧専用 UI の範囲を明確にする。
+  - root と detail URL を直接 render でき、検索・絞り込み・再読み込みなどの操作 UI が追加されていない状態になる。
+  - _Requirements: 2.1, 2.2, 2.4, 4.4_
+- [x] 1.2 backend read-only API を typed result へ正規化する client を整える
+  - `VITE_API_BASE_URL` の missing / malformed を request 前に config error として判定する。
+  - 一覧・詳細の 200 success、404 `session_not_found`、5xx、network failure を success / error union に正規化する。
+  - 上位 hook が backend の生 status 分岐を持たずに list/detail を呼べる状態になる。
+  - _Requirements: 1.1, 2.2, 2.5, 4.3_
+
+- [ ] 2. Core: page-local state と timeline 読解モデルを分離して実装する
+- [ ] 2.1 (P) 一覧画面の loading / empty / success / error 状態機械を閉じ込める
+  - mount 時に一覧取得を開始し、空配列を empty として success から分離する。
+  - backend が返した順序を保った `sessions` と `meta` を success state に渡す。
+  - UI 側が HTTP を知らずに 4 状態を描き分けられる状態になる。
+  - _Requirements: 1.1, 1.3, 1.4, 4.3_
+  - _Boundary: useSessionIndex_
+  - _Depends: 1.2_
+- [ ] 2.2 (P) 詳細画面の loading / success / not_found / error 状態機械を route param 駆動で管理する
+  - `sessionId` 変更時に in-flight request を abort し、遅延 response が現在の画面を上書きしないようにする。
+  - 404 は not_found、5xx / network / config は error として切り分ける。
+  - degraded detail は success state のまま issue と badge 表示へ渡せる状態になる。
+  - _Requirements: 2.2, 2.3, 2.5, 4.1, 4.2, 4.3_
+  - _Boundary: useSessionDetail_
+  - _Depends: 1.2_
+- [ ] 2.3 (P) タイムライン本文を text / code / tool hint の表示ブロックへ分解する
+  - fenced code を本文順のまま抽出し、改行と空白を保持した block として返す。
+  - 認識済みの構造化 hint だけを tool hint block にし、未知 schema は plain text fallback を維持する。
+  - partial / unknown event でも表示可能な本文が消えず、通常本文と tool/code を見分けられる状態になる。
+  - _Requirements: 3.2, 3.3, 3.4_
+  - _Boundary: TimelineContent, timelineContent_
+- [ ] 2.4 (P) loading / empty / not_found / error の共有 status panel を実装する
+  - 一覧と詳細で loading / empty / not_found / error を success 表示と誤認しない文言と見た目に揃える。
+  - not_found と error panel から一覧へ戻る link を辿れるようにする。
+  - panel 単体で各失敗・空状態を表現できる状態になる。
+  - _Requirements: 1.3, 1.4, 2.3, 2.5, 4.3_
+  - _Boundary: StatusPanel_
+  - _Depends: 1.1_
+- [ ] 2.5 (P) session metadata と issue 補助情報の表示整形ルールを固定する
+  - null timestamp、missing work context、missing model を安定した placeholder text に整形する。
+  - issue の severity / scope / event sequence を利用者が読める補助ラベルへ変換する。
+  - 一覧カード、詳細 header、issue 表示が欠損 field を含んでも意味を保って描画できる状態になる。
+  - _Requirements: 1.2, 3.2, 4.2_
+  - _Boundary: formatters_
+
+- [ ] 3. Integration: 一覧画面と詳細画面を UI として接続する
+- [ ] 3.1 (P) 一覧画面で session card 一覧と degraded 表示を組み立てる
+  - state に応じて status panel か session list を切り替え、backend order のまま cards を描画する。
+  - 各 card に session ID、更新日時、work context、selected model、degraded 状態を表示する。
+  - session card を選ぶと対象 detail route へ遷移し、閲覧専用の一覧画面として成立する状態になる。
+  - _Requirements: 1.1, 1.2, 2.1, 4.1, 4.3, 4.4_
+  - _Boundary: SessionIndexPage, SessionList, SessionSummaryCard_
+  - _Depends: 2.1, 2.4, 2.5_
+- [ ] 3.2 (P) 詳細 header と session-level issue 説明を実装する
+  - session metadata と degraded badge を header に表示し、不完全な履歴であることを詳細画面から識別できるようにする。
+  - session-level issue を message / scope / severity 付きで並べ、セッション全体への影響範囲を読み取れるようにする。
+  - issue を含む session を開いたとき、詳細 header と issue 表示だけで session 単位の欠落範囲が観測できる状態になる。
+  - _Requirements: 4.1, 4.2_
+  - _Boundary: SessionDetailHeader, IssueList_
+  - _Depends: 2.5_
+- [ ] 3.3 (P) 詳細タイムラインで event 単位の読解情報を描き分ける
+  - detail payload の配列順と `sequence` を一致させた timeline を描画する。
+  - 各 event に kind、role、sequence または時刻、本文 block を区別して表示する。
+  - tool hint block、code block、partial / unknown event、event-level issue が通常本文と異なる見え方で読める状態になる。
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 4.2_
+  - _Boundary: SessionTimeline, TimelineEntry, IssueList_
+  - _Depends: 2.3, 2.5, 3.2_
+- [ ] 3.4 詳細画面で state 分岐、戻る導線、timeline 統合を完了する
+  - direct URL で詳細を開いたときも hook の状態に応じて success / not_found / error を切り替える。
+  - 詳細画面から一覧へ戻る導線を明確に出し、not_found と error でも一覧基点へ戻れるようにする。
+  - 詳細 URL 直打ちでも header、issue、timeline を含む読取専用画面として成立する状態になる。
+  - _Requirements: 2.2, 2.3, 2.4, 2.5, 4.3, 4.4_
+  - _Depends: 2.2, 2.4, 3.2, 3.3_
+
+- [ ] 4. Validation: API 正規化と route UI の回帰を固定する
+- [ ] 4.1 (P) API client・timeline helper・formatters の単体テストを追加する
+  - 200 / 404 / 503 / config / network の正規化結果を固定する。
+  - fenced code、recognized tool hint、unknown hint fallback、欠損 metadata の表示整形を固定する。
+  - API と表示 helper の退行が unit test で検知できる状態になる。
+  - _Requirements: 1.2, 2.5, 3.3, 3.4, 4.2, 4.3_
+  - _Boundary: SessionApiClient, TimelineContent, formatters_
+  - _Depends: 1.2, 2.3, 2.5_
+- [ ] 4.2 一覧・詳細 route の状態遷移と導線を検証する
+  - 一覧で loading / empty / success / error が切り替わり、degraded badge と detail navigation が見えることを確認する。
+  - 詳細 direct URL で success / not_found / error / degraded success を描き分け、一覧へ戻る link が機能することを確認する。
+  - 一覧・詳細とも閲覧専用のままで、検索・絞り込み・再読み込み・自動更新の操作 UI を持たないことを確認できる。
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4, 2.5, 4.1, 4.3, 4.4_
+  - _Depends: 3.1, 3.4_
+- [ ] 4.3 タイムライン表示差分と stale response 回帰を検証する
+  - tool hint / code block / partial / unknown event の表示差分を route 上で確認する。
+  - route param 連続変更時に遅延した旧 response が現在の session 表示を上書きしないことを確認する。
+  - event-level issue を含む detail が順序を崩さず描画され、timeline 読解支援の回帰が検知できる状態になる。
+  - _Requirements: 2.2, 3.1, 3.2, 3.3, 3.4, 4.2_
+  - _Depends: 3.3, 3.4_
