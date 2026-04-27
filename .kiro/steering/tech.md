@@ -57,11 +57,11 @@ updated_at: 2026-04-27
 docker compose up --build
 
 # フロントエンド lint / build / test
-docker compose run --rm frontend pnpm lint
-docker compose run --rm frontend pnpm build
+docker compose run --rm frontend sh -lc "pnpm install --no-frozen-lockfile && pnpm lint"
+docker compose run --rm frontend sh -lc "pnpm install --no-frozen-lockfile && pnpm build"
 
 # フロントエンドテスト
-docker compose run --rm frontend pnpm test
+docker compose run --rm frontend sh -lc "pnpm install --no-frozen-lockfile && pnpm test"
 
 # バックエンド品質確認
 docker compose run --rm backend bin/ci
@@ -95,7 +95,7 @@ Vite + React + TypeScript を中心に、初期段階では過度な抽象化や
 ### 5. current / legacy を共通 contract に正規化する
 
 履歴 reader は保存形式ごとの差を読み取り層で吸収し、API から見える shape は共通化します。  
-UI や controller で format 分岐を増やすより、`copilot_history` 配下の query / presenter / type に寄せます。
+UI や controller で format 分岐を増やすより、`copilot_history` 配下の query / presenter / types に寄せます。
 
 ### 6. root failure と partial degradation を分けて返す
 

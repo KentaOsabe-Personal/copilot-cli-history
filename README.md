@@ -23,7 +23,7 @@ docker compose up --build
 ## テスト
 
 ```bash
-docker compose run --rm frontend pnpm test
+docker compose run --rm frontend sh -lc "pnpm install --no-frozen-lockfile && pnpm test"
 docker compose run --rm backend bundle exec rspec
 ```
 
