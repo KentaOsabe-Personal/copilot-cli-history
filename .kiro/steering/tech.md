@@ -1,5 +1,7 @@
 # 技術スタック
 
+updated_at: 2026-04-27
+
 ## アーキテクチャ
 
 このリポジトリは、**frontend / backend / MySQL を Docker Compose で束ねるモノレポ**です。  
@@ -18,6 +20,7 @@
 - **Vitest + Testing Library**: UI の振る舞いをテストで確認する
 - **Tailwind CSS**: 画面試作と UI 実装を素早く進める
 - **RSpec Rails**: バックエンドの API / lib / request spec を支える
+- **Rack CORS**: SPA と Rails API の分離を保ったままローカル接続を許可する
 - **RuboCop / bundler-audit / Brakeman**: Ruby 側のスタイル・依存関係・セキュリティを継続確認する
 
 ## 開発標準
@@ -53,8 +56,15 @@
 # 開発環境起動
 docker compose up --build
 
+# フロントエンド lint / build / test
+docker compose run --rm frontend pnpm lint
+docker compose run --rm frontend pnpm build
+
 # フロントエンドテスト
 docker compose run --rm frontend pnpm test
+
+# バックエンド品質確認
+docker compose run --rm backend bin/ci
 
 # バックエンドテスト
 docker compose run --rm backend bundle exec rspec
@@ -81,6 +91,16 @@ Vite + React + TypeScript を中心に、初期段階では過度な抽象化や
 
 新しい独自フローを増やすより、frontend は ESLint / Vitest、backend は RSpec / RuboCop / Brakeman / bundler-audit を活用します。  
 既存コマンドに乗ることを優先し、判断基準を散らさないようにします。
+
+### 5. current / legacy を共通 contract に正規化する
+
+履歴 reader は保存形式ごとの差を読み取り層で吸収し、API から見える shape は共通化します。  
+UI や controller で format 分岐を増やすより、`copilot_history` 配下の query / presenter / type に寄せます。
+
+### 6. root failure と partial degradation を分けて返す
+
+履歴ルートが読めないときは共通 error envelope で失敗を返し、個別セッションの破損は degraded と issue 一覧に閉じ込めます。  
+「全部失敗」か「一部だけ壊れているか」を API 契約で区別するのが前提です。
 
 ---
 _依存関係の一覧ではなく、開発判断に効く技術上の前提と標準を残す_
