@@ -28,10 +28,12 @@ services:
       - "30000:30000"
     volumes:
       - ./backend:/app
+      - ${HOME}/.copilot:/copilot-home:ro
       - backend_bundle:/usr/local/bundle
       - backend_tmp:/app/tmp
       - backend_log:/app/log
     environment:
+      COPILOT_HOME: /copilot-home
       DB_HOST: mysql
       DB_PORT: "3306"
       DB_NAME: copilot_cli_history_development
