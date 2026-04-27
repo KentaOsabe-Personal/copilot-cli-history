@@ -1,5 +1,7 @@
 # プロジェクト構造
 
+updated_at: 2026-04-27
+
 ## 組織方針
 
 このリポジトリは、**サービス単位で責務を分けたモノレポ**として扱います。  
@@ -15,7 +17,12 @@
 ### Backend API
 **Location**: `/backend/`  
 **Purpose**: Rails API、読取ロジック、永続化、API 提供を担う  
-**Example**: `app/` に Rails の本体、`config/` に環境設定、`spec/` に request/lib/support 系のテストを配置する
+**Example**: `app/controllers/api` は薄い HTTP 入口に保ち、`config/` に環境設定、`spec/` に request/lib/support 系のテストを配置する
+
+### Backend domain namespace
+**Location**: `/backend/lib/copilot_history/`  
+**Purpose**: Copilot 履歴の読取・正規化・API 向け整形を Rails 本体から分離して置く  
+**Example**: `api/session_index_query.rb`, `api/presenters/session_detail_presenter.rb`, `types/normalized_session.rb`
 
 ### Database bootstrap
 **Location**: `/mysql/`  
@@ -32,6 +39,7 @@
 - **Frontend files**: React コンポーネントは `App.tsx` のような PascalCase、テストは `*.test.tsx`
 - **Backend files**: Rails 規約に従い、controller は `*_controller.rb`、spec は `*_spec.rb`
 - **Ruby constants**: クラス・モジュールは PascalCase
+- **Backend service objects**: query / presenter / reader は役割が分かる接尾辞で切る
 - **Docs / configs**: 既存ファイル名に合わせ、ルートの運用ドキュメントは用途が分かる名前を優先する
 
 ## import / load の整理
@@ -42,7 +50,11 @@ import App from './App.tsx'
 ```
 
 ```rb
-class ApplicationController < ActionController::API
+module CopilotHistory
+  module Api
+    class SessionIndexQuery
+    end
+  end
 end
 ```
 
@@ -53,6 +65,7 @@ end
 **Backend**:
 - Rails の autoload と規約配置を基本にする
 - `lib/` 配下は `config.autoload_lib` で読み込む前提に寄せ、手動 require を増やしすぎない
+- API 向けの orchestration は `CopilotHistory::Api` 名前空間に集め、controller に整形ロジックを溜めない
 
 ## コード構成の原則
 
@@ -66,12 +79,17 @@ Compose、Dockerfile、README、Kiro 関連はルートで管理します。
 新しい reader や domain logic を追加するときも、まず Rails 標準の置き場所を検討します。  
 共通処理は `lib/` や `concerns/` を使い、無秩序なトップレベル追加を避けます。
 
-### 3. フロントエンドは UI の近くにテストを置く
+### 3. HTTP と履歴ドメインを分離する
+
+request routing と response status は controller が担い、履歴の読取・検索・整形は `lib/copilot_history` に寄せます。  
+`query -> presenter -> types` の流れを保ち、UI 向け schema の都合を reader 層へ逆流させません。
+
+### 4. フロントエンドは UI の近くにテストを置く
 
 小さな画面やコンポーネントは、実装ファイルの近くに `*.test.tsx` を置く構成を基本にします。  
 グローバルなテスト初期化だけを `src/test/` に切り出します。
 
-### 4. 新しい知識は steering か specs に寄せる
+### 5. 新しい知識は steering か specs に寄せる
 
 リポジトリ全体に効くルールは `steering` に、機能固有の詳細は `specs` に置きます。  
 新しいコードが既存パターンに従うなら、steering を毎回増やす必要はありません。
