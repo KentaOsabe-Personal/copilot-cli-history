@@ -56,32 +56,35 @@
   - _Requirements: 1.3, 3.1, 4.2, 5.1, 5.3_
   - _Depends: 3.1_
 
-- [ ] 4. Integration: API と UI の session detail flow を共通契約へ接続する
-- [ ] 4.1 session detail API flow で current canonical helper field を response まで通す
+- [x] 4. Integration: API と UI の session detail flow を共通契約へ接続する
+- [x] 4.1 session detail API flow で current canonical helper field を response まで通す
   - SessionDetailQuery が選んだ current / legacy session を同じ presenter / endpoint flow で返し、source format 専用分岐を増やさない。
   - current の partial session を success として返しつつ、not found と root failure の既存境界は維持する。
   - detail endpoint から current / legacy の両 session が同じ主要 field と degraded signal を持って返る状態になる。
   - _Requirements: 1.4, 4.1, 4.3, 4.4, 5.4_
   - _Depends: 2.4, 2.5_
-- [ ] 4.2 session detail page で canonical timeline blocks と degraded 表示を end-to-end で採用する
+- [x] 4.2 session detail page で canonical timeline blocks と degraded 表示を end-to-end で採用する
   - canonical DTO を page / entry / content rendering に接続し、source format 切替や専用導線を増やさない。
   - current 対応後も legacy session の主要 timeline 読取体験を維持し、未提供項目と読取 failure の区別が UI へ伝わるようにする。
   - current / legacy が同時に存在しても同じ詳細画面フローで tool hint・detail summary・partial 表示まで読める状態になる。
   - _Requirements: 2.4, 4.1, 4.2, 4.4, 5.3, 5.4_
   - _Depends: 3.1, 3.2, 4.1_
 
-- [ ] 5. Validation: degraded と互換回帰を current / legacy 両面で固定する
-- [ ] 5.1 (P) backend specs で current session detail の部分互換と unknown event の境界を固定する
+- [x] 5. Validation: degraded と互換回帰を current / legacy 両面で固定する
+- [x] 5.1 (P) backend specs で current session detail の部分互換と unknown event の境界を固定する
   - current fixture を使い、message、tool_calls、detail、mapping_status、issues が同じ timeline で返ることを検証する。
   - unknown event や invalid JSONL line が空 success へ落ちず、degraded session / event として観測できることを確認する。
   - current 対応後も legacy session detail の主要 field と issue grouping が後退しないことを検知できる状態になる。
   - _Requirements: 1.4, 3.3, 3.4, 4.4, 5.2, 5.4_
   - _Boundary: Backend session detail validation_
   - _Depends: 4.1_
-- [ ] 5.2 (P) frontend tests で本文・tool hint・detail・partial 表示の回帰を固定する
+- [x] 5.2 (P) frontend tests で本文・tool hint・detail・partial 表示の回帰を固定する
   - current session の会話本文、code block、tool hint、detail summary が source format 分岐なしで描画されることを確認する。
   - `mapping_status=partial` の badge と issue 説明が会話本文を壊さず表示され、閲覧自体は継続できることを確認する。
   - current / legacy の両 session で同じ詳細画面から読める範囲と不確実な範囲を判断できる状態がテストで固定される。
   - _Requirements: 2.1, 2.2, 3.2, 5.1, 5.3, 5.4_
   - _Boundary: Frontend session detail validation_
   - _Depends: 4.2_
+
+## Implementation Notes
+- SessionDetailPresenter は timeline に対応する event が存在しない sequence 付き issue を top-level issues へ残し、invalid JSONL line のような orphan event issue を失わないようにする。

@@ -8,7 +8,10 @@ module CopilotHistory
 
         def call(result:)
           session = result.session
-          event_issues_by_sequence = session.issues.select { |issue| issue.sequence }.group_by(&:sequence)
+          event_sequences = session.events.map(&:sequence)
+          event_issues_by_sequence = session.issues
+            .select { |issue| issue.sequence && event_sequences.include?(issue.sequence) }
+            .group_by(&:sequence)
 
           {
             data: {
@@ -19,7 +22,9 @@ module CopilotHistory
               work_context: work_context_for(session),
               selected_model: session.selected_model,
               degraded: session.issues.any?,
-              issues: session.issues.select { |issue| issue.sequence.nil? }.map { |issue| issue_presenter.call(issue: issue) },
+              issues: session.issues
+                .select { |issue| issue.sequence.nil? || !event_sequences.include?(issue.sequence) }
+                .map { |issue| issue_presenter.call(issue: issue) },
               message_snapshots: session.message_snapshots.map { |snapshot| present_snapshot(snapshot) },
               timeline: session.events.map { |event| present_event(event, event_issues_by_sequence: event_issues_by_sequence) }
             }

@@ -272,6 +272,90 @@ RSpec.describe CopilotHistory::Api::Presenters::SessionDetailPresenter do
         ]
       )
     end
+
+    it "keeps unmatched event issues in the session issue list so invalid lines remain visible" do
+      unmatched_event_issue = CopilotHistory::Types::ReadIssue.new(
+        code: CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENT_PARSE_FAILED,
+        message: "events.jsonl line could not be parsed",
+        source_path: "/tmp/copilot/session-state/current-schema-degraded/events.jsonl",
+        sequence: 5,
+        severity: :error
+      )
+      result = CopilotHistory::Api::Types::SessionLookupResult::Found.new(
+        root: build_root,
+        session: CopilotHistory::Types::NormalizedSession.new(
+          session_id: "current-schema-degraded",
+          source_format: :current,
+          created_at: "2026-04-28T02:00:00Z",
+          updated_at: "2026-04-28T02:03:00Z",
+          selected_model: nil,
+          events: [
+            build_event(
+              sequence: 1,
+              raw_type: "user.message",
+              occurred_at: "2026-04-28T02:00:01Z",
+              role: "user",
+              content: "run diagnostics",
+              raw_payload: {
+                "type" => "user.message"
+              }
+            )
+          ],
+          message_snapshots: [],
+          issues: [ unmatched_event_issue ],
+          source_paths: {
+            workspace: "/tmp/copilot/session-state/current-schema-degraded/workspace.yaml",
+            events: "/tmp/copilot/session-state/current-schema-degraded/events.jsonl"
+          }
+        )
+      )
+
+      expect(presenter.call(result: result)).to eq(
+        data: {
+          id: "current-schema-degraded",
+          source_format: "current",
+          created_at: "2026-04-28T02:00:00Z",
+          updated_at: "2026-04-28T02:03:00Z",
+          work_context: {
+            cwd: nil,
+            git_root: nil,
+            repository: nil,
+            branch: nil
+          },
+          selected_model: nil,
+          degraded: true,
+          issues: [
+            {
+              code: "current.event_parse_failed",
+              severity: "error",
+              message: "events.jsonl line could not be parsed",
+              source_path: "/tmp/copilot/session-state/current-schema-degraded/events.jsonl",
+              scope: "event",
+              event_sequence: 5
+            }
+          ],
+          message_snapshots: [],
+          timeline: [
+            {
+              sequence: 1,
+              kind: "message",
+              mapping_status: "complete",
+              raw_type: "user.message",
+              occurred_at: "2026-04-28T02:00:01Z",
+              role: "user",
+              content: "run diagnostics",
+              tool_calls: [],
+              detail: nil,
+              raw_payload: {
+                "type" => "user.message"
+              },
+              degraded: false,
+              issues: []
+            }
+          ]
+        }
+      )
+    end
   end
 
   def build_root

@@ -340,6 +340,96 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
       end
     end
 
+    it "keeps degraded current detail responses readable while surfacing partial, unknown, and invalid line issues" do
+      with_copilot_history_fixture("current_schema_degraded") do |root|
+        events_path = root.join("session-state/current-schema-degraded/events.jsonl")
+        ENV["COPILOT_HOME"] = root.to_s
+
+        get "/api/sessions/current-schema-degraded"
+
+        expect(response).to have_http_status(:ok)
+
+        payload = JSON.parse(response.body, symbolize_names: true).fetch(:data)
+        timeline = payload.fetch(:timeline)
+
+        expect(payload).to include(
+          id: "current-schema-degraded",
+          source_format: "current",
+          created_at: "2026-04-28T02:00:00Z",
+          updated_at: "2026-04-28T02:03:00Z",
+          degraded: true,
+          message_snapshots: []
+        )
+        expect(payload.fetch(:issues)).to include(
+          {
+            code: "current.event_parse_failed",
+            severity: "error",
+            message: "events.jsonl line could not be parsed",
+            source_path: events_path.to_s,
+            scope: "event",
+            event_sequence: 5
+          }
+        )
+        expect(timeline.map { |event| [ event.fetch(:sequence), event.fetch(:kind), event.fetch(:mapping_status), event.fetch(:degraded) ] }).to eq(
+          [
+            [ 1, "message", "complete", false ],
+            [ 2, "message", "partial", true ],
+            [ 3, "detail", "complete", false ],
+            [ 4, "unknown", "complete", true ]
+          ]
+        )
+        expect(timeline.fetch(1)).to include(
+          role: "assistant",
+          content: "Starting diagnostics.",
+          tool_calls: [
+            {
+              name: nil,
+              arguments_preview: "{\"command\":\"printenv\",\"token\":\"[REDACTED]\"}",
+              is_truncated: false,
+              status: "partial"
+            }
+          ],
+          detail: nil
+        )
+        expect(timeline.fetch(1).fetch(:issues)).to eq(
+          [
+            {
+              code: "event.partial_mapping",
+              severity: "warning",
+              message: "event payload matched partially",
+              source_path: events_path.to_s,
+              scope: "event",
+              event_sequence: 2
+            }
+          ]
+        )
+        expect(timeline.fetch(2)).to include(
+          detail: {
+            category: "hook",
+            title: "hook.start",
+            body: "before-tool / *"
+          }
+        )
+        expect(timeline.fetch(3)).to include(
+          raw_type: "mystery.event",
+          content: nil,
+          detail: nil
+        )
+        expect(timeline.fetch(3).fetch(:issues)).to eq(
+          [
+            {
+              code: "event.unknown_shape",
+              severity: "warning",
+              message: "event payload could not be mapped to canonical fields",
+              source_path: events_path.to_s,
+              scope: "event",
+              event_sequence: 4
+            }
+          ]
+        )
+      end
+    end
+
     it "reuses the shared root failure envelope for detail requests" do
       Dir.mktmpdir("copilot-history-home") do |home|
         ENV.delete("COPILOT_HOME")
