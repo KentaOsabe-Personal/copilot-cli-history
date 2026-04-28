@@ -122,6 +122,7 @@ RSpec.describe "CopilotHistory normalized contracts" do
       session = described_class.new(
         session_id: "session-123",
         source_format: :legacy,
+        source_state: :degraded,
         cwd: "/repo",
         git_root: "/repo",
         repository: "example/repo",
@@ -139,6 +140,7 @@ RSpec.describe "CopilotHistory normalized contracts" do
 
       expect(session.session_id).to eq("session-123")
       expect(session.source_format).to eq(:legacy)
+      expect(session.source_state).to eq(:degraded)
       expect(session.cwd).to eq(Pathname("/repo"))
       expect(session.git_root).to eq(Pathname("/repo"))
       expect(session.repository).to eq("example/repo")
@@ -152,6 +154,40 @@ RSpec.describe "CopilotHistory normalized contracts" do
       expect(session.source_paths).to eq(
         source: Pathname("/tmp/history-session-state/session-123.json")
       )
+    end
+
+    it "defaults source state to complete and rejects unsupported states" do
+      event = CopilotHistory::Types::NormalizedEvent.new(
+        sequence: 1,
+        kind: :message,
+        raw_type: "user_message",
+        occurred_at: "2026-04-26T10:00:00Z",
+        role: "user",
+        content: "hello",
+        raw_payload: { "type" => "user_message" }
+      )
+
+      session = described_class.new(
+        session_id: "session-123",
+        source_format: :current,
+        events: [ event ],
+        message_snapshots: [],
+        issues: [],
+        source_paths: {}
+      )
+
+      expect(session.source_state).to eq(:complete)
+      expect {
+        described_class.new(
+          session_id: "session-123",
+          source_format: :current,
+          source_state: :unknown,
+          events: [ event ],
+          message_snapshots: [],
+          issues: [],
+          source_paths: {}
+        )
+      }.to raise_error(ArgumentError, /source_state/)
     end
   end
 end

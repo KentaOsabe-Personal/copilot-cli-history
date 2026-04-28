@@ -6,6 +6,7 @@ RSpec.describe CopilotHistory::LegacySessionReader, :copilot_history do
       with_copilot_history_fixture("legacy_valid") do |root|
         session = described_class.new.call(build_source(root, "legacy-valid"))
 
+        expect(session.source_state).to eq(:complete)
         expect(session).to eq(
           CopilotHistory::Types::NormalizedSession.new(
             session_id: "legacy-valid",
@@ -80,6 +81,7 @@ RSpec.describe CopilotHistory::LegacySessionReader, :copilot_history do
         session = described_class.new.call(build_source(root, "legacy-invalid"))
 
         expect(session.session_id).to eq("legacy-invalid")
+        expect(session.source_state).to eq(:degraded)
         expect(session.events).to eq([])
         expect(session.message_snapshots).to eq([])
         expect(session.issues).to eq(
@@ -103,6 +105,7 @@ RSpec.describe CopilotHistory::LegacySessionReader, :copilot_history do
           session = described_class.new.call(build_source(root, "legacy-unreadable"))
 
           expect(session.session_id).to eq("legacy-unreadable")
+          expect(session.source_state).to eq(:degraded)
           expect(session.events).to eq([])
           expect(session.message_snapshots).to eq([])
           expect(session.issues).to eq(

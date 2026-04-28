@@ -12,10 +12,12 @@ module CopilotHistory
 
       workspace_metadata, workspace_issues = read_workspace(source.artifact_paths.fetch(:workspace))
       events, event_issues = read_events(source)
+      issues = workspace_issues + event_issues
 
       CopilotHistory::Types::NormalizedSession.new(
         session_id: workspace_metadata.fetch("session_id", source.session_id),
         source_format: :current,
+        source_state: source_state_for(workspace_issues:, event_issues:),
         cwd: workspace_metadata["cwd"],
         git_root: workspace_metadata["git_root"],
         repository: workspace_metadata["repository"],
@@ -25,7 +27,7 @@ module CopilotHistory
         selected_model: nil,
         events: events,
         message_snapshots: [],
-        issues: workspace_issues + event_issues,
+        issues: issues,
         source_paths: source.artifact_paths
       )
     end
@@ -51,6 +53,7 @@ module CopilotHistory
 
     def read_events(source)
       events_path = source.artifact_paths.fetch(:events)
+      return [ [], [ warning_issue(CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_MISSING, "events.jsonl is missing for current session", events_path) ] ] unless events_path.exist?
       return [ [], [ error_issue(CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_UNREADABLE, "events.jsonl is not accessible", events_path) ] ] unless readable_file?(events_path)
 
       normalizer = event_normalizer_class.new(source_path: events_path)
@@ -89,6 +92,26 @@ module CopilotHistory
         sequence: sequence,
         severity: :error
       )
+    end
+
+    def warning_issue(code, message, source_path, sequence: nil)
+      CopilotHistory::Types::ReadIssue.new(
+        code: code,
+        message: message,
+        source_path: source_path,
+        sequence: sequence,
+        severity: :warning
+      )
+    end
+
+    def source_state_for(workspace_issues:, event_issues:)
+      return :degraded if workspace_issues.any?
+
+      if event_issues.one? && event_issues.first.code == CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_MISSING
+        return :workspace_only
+      end
+
+      event_issues.any? ? :degraded : :complete
     end
 
     def readable_file?(path)

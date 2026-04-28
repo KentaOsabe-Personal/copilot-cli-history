@@ -298,7 +298,8 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
 
         payload = JSON.parse(response.body, symbolize_names: true).fetch(:data)
         timeline = payload.fetch(:timeline)
-        assistant_message = timeline.find { |event| event.fetch(:raw_type) == "assistant.message" }
+        assistant_message = timeline.find { |event| event.fetch(:sequence) == 4 }
+        empty_tool_request = timeline.find { |event| event.fetch(:sequence) == 5 }
         detail_event = timeline.find { |event| event.fetch(:raw_type) == "tool.execution_start" }
         expect(payload.fetch(:source_format)).to eq("current")
         expect(payload.fetch(:message_snapshots)).to eq([])
@@ -308,9 +309,11 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
             [ 2, "message", "complete" ],
             [ 3, "detail", "complete" ],
             [ 4, "message", "complete" ],
-            [ 5, "detail", "complete" ],
+            [ 5, "message", "complete" ],
             [ 6, "detail", "complete" ],
-            [ 7, "detail", "complete" ]
+            [ 7, "detail", "complete" ],
+            [ 8, "detail", "complete" ],
+            [ 9, "detail", "complete" ]
           ]
         )
         expect(assistant_message).to include(
@@ -320,6 +323,19 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
             {
               name: "functions.bash",
               arguments_preview: "{\"command\":\"git --no-pager status\",\"description\":\"Inspect repository status\"}",
+              is_truncated: false,
+              status: "complete"
+            }
+          ],
+          detail: nil
+        )
+        expect(empty_tool_request).to include(
+          role: "assistant",
+          content: nil,
+          tool_calls: [
+            {
+              name: "functions.bash",
+              arguments_preview: "{\"command\":\"pwd\"}",
               is_truncated: false,
               status: "complete"
             }

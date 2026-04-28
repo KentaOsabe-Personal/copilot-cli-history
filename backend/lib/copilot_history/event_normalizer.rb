@@ -95,7 +95,7 @@ module CopilotHistory
       issues = []
       mapping_status = :complete
 
-      if role.nil? || content.nil? || timestamp_missing_or_invalid?(payload) || tool_call_partial
+      if role.nil? || missing_required_current_content?(raw_type:, content:, tool_calls:) || timestamp_missing_or_invalid?(payload) || tool_call_partial
         mapping_status = :partial
         issues << partial_mapping_issue(sequence:)
       end
@@ -262,6 +262,12 @@ module CopilotHistory
     def role_from_current_type(raw_type)
       prefix = raw_type.to_s.split(".", 2).first
       %w[user assistant system].include?(prefix) ? prefix : nil
+    end
+
+    def missing_required_current_content?(raw_type:, content:, tool_calls:)
+      return false if raw_type == "assistant.message" && content.nil? && tool_calls.any?
+
+      content.nil?
     end
 
     def partial_mapping_issue(sequence:)

@@ -209,15 +209,18 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
       with_copilot_history_fixture("current_schema_valid") do |root|
         session = described_class.new.call(build_source(root, "current-schema-valid"))
 
+        expect(session.source_state).to eq(:complete)
         expect(session.events.map { |event| [ event.sequence, event.kind, event.mapping_status, event.raw_type ] }).to eq(
           [
             [ 1, :message, :complete, "system.message" ],
             [ 2, :message, :complete, "user.message" ],
             [ 3, :detail, :complete, "assistant.turn_start" ],
             [ 4, :message, :complete, "assistant.message" ],
-            [ 5, :detail, :complete, "tool.execution_start" ],
-            [ 6, :detail, :complete, "tool.execution_complete" ],
-            [ 7, :detail, :complete, "assistant.turn_end" ]
+            [ 5, :message, :complete, "assistant.message" ],
+            [ 6, :detail, :complete, "tool.execution_start" ],
+            [ 7, :detail, :complete, "tool.execution_complete" ],
+            [ 8, :detail, :complete, "skill.invoked" ],
+            [ 9, :detail, :complete, "assistant.turn_end" ]
           ]
         )
         expect(session.events.fetch(3).tool_calls).to eq(
@@ -229,6 +232,22 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
               status: :complete
             )
           ]
+        )
+        expect(session.events.fetch(4).content).to be_nil
+        expect(session.events.fetch(4).tool_calls).to eq(
+          [
+            CopilotHistory::Types::NormalizedToolCall.new(
+              name: "functions.bash",
+              arguments_preview: "{\"command\":\"pwd\"}",
+              is_truncated: false,
+              status: :complete
+            )
+          ]
+        )
+        expect(session.events.fetch(7).detail).to eq(
+          category: "skill",
+          title: "skill.invoked",
+          body: "kiro-review / functions.skill"
         )
         expect(session.events.fetch(2).detail).to eq(
           category: "assistant_turn",
@@ -243,6 +262,7 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
       with_copilot_history_fixture("current_schema_degraded") do |root|
         session = described_class.new.call(build_source(root, "current-schema-degraded"))
 
+        expect(session.source_state).to eq(:degraded)
         expect(session.events.map { |event| [ event.sequence, event.kind, event.mapping_status, event.raw_type ] }).to eq(
           [
             [ 1, :message, :complete, "user.message" ],
@@ -288,6 +308,26 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
             sequence: 5,
             severity: :error
           )
+        )
+      end
+    end
+
+    it "marks workspace-only current sessions with a dedicated issue when events.jsonl is missing" do
+      with_copilot_history_fixture("current_schema_workspace_only") do |root|
+        session = described_class.new.call(build_source(root, "current-schema-workspace-only"))
+
+        expect(session.session_id).to eq("current-schema-workspace-only")
+        expect(session.source_state).to eq(:workspace_only)
+        expect(session.events).to eq([])
+        expect(session.issues).to eq(
+          [
+            CopilotHistory::Types::ReadIssue.new(
+              code: CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_MISSING,
+              message: "events.jsonl is missing for current session",
+              source_path: root.join("session-state/current-schema-workspace-only/events.jsonl"),
+              severity: :warning
+            )
+          ]
         )
       end
     end

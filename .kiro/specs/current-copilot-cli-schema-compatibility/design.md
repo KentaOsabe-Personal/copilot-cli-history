@@ -1,93 +1,104 @@
 # Design Document
 
 ## Overview
-この仕様は、Copilot CLI の current `events.jsonl` schema を既存の read-only 履歴参照アプリへ取り込み、legacy と同じ主要な読取体験を保つための設計である。対象は current session の会話本文、tool request 補助情報、非会話イベント、degraded 可視化に限定し、責務の中心は backend の正規化境界と API 契約の強化に置く。
+この仕様は、現行 Copilot CLI の `session-state/{session-id}/events.jsonl` を read-only 履歴参照アプリで会話中心に読めるようにする。対象利用者は、過去セッションの user / assistant のやり取りを最初に読み返したい利用者と、schema 差分や部分破損を切り分けたい運用者である。
 
-利用者は current / legacy の差を意識せずにセッション詳細を読み返せる。運用者は部分互換や未知 event を空成功と混同せず切り分けられる。変更は controller や root 解決を広げず、`backend/lib/copilot_history` と `frontend/src/features/sessions` の既存責務内に閉じる。
+変更の中心は backend の正規化境界と API 契約である。`events.jsonl` の完全 event log は失わず、主表示用の conversation transcript、補助 activity、明示要求時の raw detail を分けて返す。frontend は source format を判定せず、API が提供する共通 contract だけで current / legacy を表示する。
 
 ### Goals
-- current schema の `user.message` / `assistant.message` / `system.message` を legacy と同じ timeline 文脈で読める canonical contract へ正規化する
-- assistant message の tool request を通常本文と区別できる helper field として API へ出し、frontend が source format 非依存で描画できるようにする
-- 非会話 event を message と誤認させず、detail と unknown を分けて degraded / issue 可視化を維持する
+- current schema の `user.message` と本文付き `assistant.message` から主会話 transcript を抽出する
+- system / turn / tool execution / hook / skill / unknown event を会話本文から分離し、追跡可能な activity と issue として保持する
+- 一覧と詳細の両方で、会話あり session、会話数、preview、利用者向け更新時刻、degraded 状態を一貫して提示する
 
 ### Non-Goals
-- `backend-history-reader` / `backend-session-api` / `frontend-session-ui` の基礎責務を変更すること
-- Phase 7 の永続化、検索、監視、詳細 debug drawer、外部共有機能の追加
-- tool execution の開始完了を相関して高度な実行トレースを構築すること
+- `session-store.db`、`session.db`、MySQL を transcript source にすること
+- 全文検索、差分取り込み、永続化 schema、外部共有、gist 連携
+- tool request と tool execution の完全相関、または raw payload 専用 viewer の構築
+- root 解決、controller routing、legacy reader の基礎責務の再設計
 
 ## Boundary Commitments
 
 ### This Spec Owns
-- current `events.jsonl` line を canonical timeline event に変換する reader / normalizer の拡張
-- session detail API における current / legacy 共通 timeline contract の拡張
-- timeline event の tool request summary と non-message detail summary の表示契約
-- current schema 互換不足を `degraded` / `issues` で可視化するための設計
+- current `events.jsonl` event を canonical event、conversation entry、activity entry へ分類する互換ルール
+- session index / detail API における conversation summary、conversation transcript、activity summary、raw detail 分離の contract
+- detail API の `include_raw` 明示要求を controller から presenter / frontend typed client へ伝搬する最小 contract
+- current session の更新時刻を event timestamp と file mtime から補正する判断順序
+- current session の `source_state` を `complete | workspace_only | degraded` に分類する導出規則
+- current schema 互換不足を `degraded` と `issues` で可視化する規則
+- legacy `history-session-state` の既存会話表示を維持する回帰条件
 
 ### Out of Boundary
-- session index contract の再設計
-- raw payload 全体を閲覧する専用 UI や debug 画面
-- schema 差分を永続ストアへ保存する仕組み
-- CLI 実行、tool invocation、hook 実行の再現や再実行
+- Copilot CLI の保存 schema 自体の安定化や変更
+- raw payload 全体を通常 detail 画面に常時表示する UI
+- tool execution の親子相関、実行再現、権限判断、hook 実行
+- 検索 index、正規化 DB、session-store の再構築
+- API endpoint の認証認可や外部公開
 
 ### Allowed Dependencies
-- `backend/lib/copilot_history` 配下の reader / types / presenter / errors
-- `frontend/src/features/sessions` 配下の API types、presentation helper、timeline component
-- `workspace.yaml` と `events.jsonl` の raw files
-- 既存の `degraded` / `issues` / `raw_payload` 契約
+- `backend/lib/copilot_history` 配下の reader、normalizer、types、query、presenter、errors
+- `frontend/src/features/sessions` 配下の API 型、presentation helper、session 一覧・詳細 UI
+- raw source としての `workspace.yaml`、`events.jsonl`、legacy `history-session-state/*.json`
+- 既存の `degraded`、`issues`、read-only API、Docker Compose 検証導線
 
 ### Revalidation Triggers
-- session detail timeline DTO の field shape 変更
-- `NormalizedEvent` の ownership や kind taxonomy の変更
-- tool request summary の生成規則や truncation 方針の変更
-- current / legacy の責務境界が backend 以外へ移る変更
+- session index / detail DTO における `conversation`、`activity`、`timeline`、`raw_payload` の shape 変更
+- `include_raw` query parameter の名前、真偽値解釈、または controller / presenter 伝搬方針の変更
+- `source_state` の enum 値、優先順位、または workspace-only 判定条件の変更
+- `NormalizedEvent`、`NormalizedConversationEntry`、`NormalizedActivityEntry` の ownership または kind taxonomy 変更
+- current schema の message / tool / activity classifier 追加や fallback 方針変更
+- 更新時刻補正の優先順位変更
+- frontend が raw payload または source format を直接判定する変更
 
 ## Architecture
 
 ### Existing Architecture Analysis
-- `CurrentSessionReader` は `workspace.yaml` と `events.jsonl` を読み、各 line を `EventNormalizer` へ渡す。
-- `EventNormalizer` は flat な `user_message` / `assistant_message` にしか対応していない。
-- `SessionDetailPresenter` は `raw_payload` を timeline DTO へそのまま載せる。
-- frontend は `timelineContent.ts` で `raw_payload.toolRequests` を直接読んでおり、current schema の nested `data.toolRequests` には未対応である。
+- `SessionSourceCatalog` は current directory と legacy JSON を source として列挙し、format 差分を reader へ委譲している。
+- `CurrentSessionReader` は `workspace.yaml` と `events.jsonl` を読み、line 単位で `EventNormalizer` に渡す。現状は session metadata の `updated_at` を優先しており、event timestamp や file mtime の補正が不足している。
+- `EventNormalizer` は current dotted event と legacy flat event を `message | detail | unknown` に正規化できるが、主会話 transcript と activity の API 上の分離はまだ contract として固定されていない。
+- `SessionDetailPresenter` は timeline を返すが、通常閲覧で raw payload が重くなる懸念がある。frontend は timeline を主表示としているため、会話 first ではなく event log first になりやすい。
+- `SessionIndexPresenter` は event count と message snapshot count を返すが、表示可能な会話数、preview、workspace-only current session の識別を返していない。
 
 ### Architecture Pattern & Boundary Map
 
 ```mermaid
 graph TB
-    RawFiles[Raw files] --> CurrentReader[CurrentSessionReader]
-    RawFiles --> LegacyReader[LegacySessionReader]
-    CurrentReader --> Normalizer[EventNormalizer]
-    LegacyReader --> Normalizer
-    Normalizer --> NormalizedSession[Normalized session types]
-    NormalizedSession --> Presenter[SessionDetailPresenter]
-    Presenter --> DetailApi[Session detail contract]
-    DetailApi --> ApiTypes[frontend api types]
-    ApiTypes --> TimelineFormatter[timeline content helper]
-    TimelineFormatter --> TimelineUi[timeline entry ui]
+    RawFiles[Raw files] --> SourceCatalog[Source catalog]
+    SourceCatalog --> CurrentReader[Current reader]
+    SourceCatalog --> LegacyReader[Legacy reader]
+    CurrentReader --> EventNormalizer[Event normalizer]
+    LegacyReader --> EventNormalizer
+    EventNormalizer --> NormalizedSession[Normalized session]
+    NormalizedSession --> ConversationProjector[Conversation projector]
+    NormalizedSession --> ActivityProjector[Activity projector]
+    ConversationProjector --> ApiPresenters[API presenters]
+    ActivityProjector --> ApiPresenters
+    ApiPresenters --> FrontendTypes[Frontend API types]
+    FrontendTypes --> ConversationUi[Conversation UI]
+    FrontendTypes --> ActivityUi[Activity UI]
 ```
 
 **Architecture Integration**:
-- Selected pattern: backend canonicalization。source format 差分は normalizer で吸収し、API と UI は共通 timeline contract だけを見る。
-- Domain boundaries: raw file 読み取りは reader、event の意味づけは normalizer、HTTP response shape は presenter、表示整形は frontend presentation helper に分離する。
-- Existing patterns preserved: controller は薄いまま、`copilot_history` namespace に読取と整形を寄せる、frontend は相対 import と feature 配下の局所テストを維持する。
-- New components rationale: tool request summary と detail summary は raw payload だけでは current / legacy 共通表示が保てないため、API helper field として追加する。
-- Helper field ownership: `kind`, `mapping_status`, `tool_calls`, `detail` の意味づけは `EventNormalizer` で確定し、`SessionDetailPresenter` は再分類せず DTO へ写像するだけに留める。
-- Steering compliance: raw files 正本、format 差分の reader 吸収、read-only API 契約、partial degradation の明示を維持する。
+- Selected pattern: backend canonicalization。source format 差分と event 分類は backend に閉じ、frontend は共通 DTO を描画する。
+- Domain boundaries: reader は raw file read と read issue、normalizer は event 意味づけ、projector は conversation / activity 派生、presenter は API shape、frontend は表示状態だけを担当する。
+- Existing patterns preserved: controller は薄く保ち、`copilot_history` namespace に履歴 domain を集約し、frontend は `features/sessions` 内の API 型と presentation helper に閉じる。
+- New components rationale: conversation transcript と activity 分離は複数要件にまたがるため、presenter 内の ad hoc filter ではなく projector と DTO として明示する。
+- Raw request path: controller は `include_raw` query parameter を boolean に正規化して presenter へ渡すだけに留め、reader / query / frontend component は raw inclusion policy を直接決めない。
+- Steering compliance: raw files を正本とし、壊れた data を隠さず、current / legacy を共通 contract に正規化する。
 
 **Dependency Direction**
-- Backend read path: `errors and types -> event normalizer -> current/legacy readers -> session detail query`
-- Backend response path: `normalized session -> session detail presenter -> controller response`
-- Frontend: `sessionApi.types -> presentation/timelineContent -> components/TimelineContent -> components/TimelineEntry -> pages/SessionDetailPage`
-- `tool_calls`, `detail`, `mapping_status` の確定責務は backend normalizer に閉じ込め、query / presenter / frontend へ source format 判定を逆流させない。
-- 実装と review はこの依存方向違反をエラーとして扱う。
+- Backend read path: `types/errors -> normalizer -> readers -> queries -> presenters`
+- Backend projection path: `NormalizedSession -> ConversationProjector / ActivityProjector -> index/detail presenters`
+- Frontend path: `sessionApi.types -> presentation helpers -> components -> pages`
+- query、presenter、frontend は current raw shape を直接判定しない。event type classifier の ownership は `EventNormalizer` に固定する。
 
 ### Technology Stack
 
 | Layer | Choice / Version | Role in Feature | Notes |
 |-------|------------------|-----------------|-------|
-| Backend | Ruby 4 / Rails 8.1 API | current / legacy の共通 timeline 正規化と API 提供 | 新規外部依存は追加しない |
-| Frontend | React 19 / TypeScript 6 | canonical timeline contract の描画 | source format 分岐は持たない |
-| Data / Storage | local `workspace.yaml` / `events.jsonl` | raw history の一次ソース | DB migration なし |
-| Infrastructure / Runtime | Docker Compose | backend / frontend 検証環境 | 既存コマンドのみ使用 |
+| Backend | Ruby 4 / Rails 8.1 API | current / legacy の正規化、projection、read-only API | 新規 gem は追加しない |
+| Frontend | React 19 / TypeScript 6 / Vitest | conversation first の描画、activity 折りたたみ、raw 明示要求 | `any` は使わず union type で DTO を表す |
+| Data / Storage | local `workspace.yaml` / `events.jsonl` / legacy JSON | raw history の一次ソース | DB migration なし |
+| Infrastructure | Docker Compose | backend / frontend 検証 | 既存コマンドを維持 |
 
 ## File Structure Plan
 
@@ -95,40 +106,80 @@ graph TB
 ```text
 backend/
 ├── lib/copilot_history/
-│   ├── current_session_reader.rb                # current session line read と normalizer 呼び出し
-│   ├── event_normalizer.rb                      # current / legacy の canonical event 正規化
-│   ├── errors/read_error_code.rb                # degraded / unknown 用 code 定義
-│   ├── types/
-│   │   ├── normalized_event.rb                  # canonical timeline event 型
-│   │   └── normalized_tool_call.rb              # tool request summary 型
-│   └── api/presenters/session_detail_presenter.rb # API DTO への変換
-├── spec/fixtures/copilot_history/
-│   └── current_cli_schema_compatibility/        # current schema の代表 fixture
-└── spec/lib/copilot_history/
-    ├── current_session_reader_spec.rb           # current fixture と degraded 読取
-    ├── event_normalizer_spec.rb                 # event type 別 canonicalization
-    └── api/presenters/session_detail_presenter_spec.rb # timeline DTO shape
+│   ├── current_session_reader.rb
+│   ├── legacy_session_reader.rb
+│   ├── event_normalizer.rb
+│   ├── api/
+│   │   ├── session_index_query.rb
+│   │   ├── session_detail_query.rb
+│   │   └── presenters/
+│   │       ├── session_index_presenter.rb
+│   │       └── session_detail_presenter.rb
+│   ├── errors/read_error_code.rb
+│   ├── projections/
+│   │   ├── conversation_projector.rb
+│   │   └── activity_projector.rb
+│   └── types/
+│       ├── normalized_session.rb
+│       ├── normalized_event.rb
+│       ├── normalized_conversation_entry.rb
+│       ├── normalized_activity_entry.rb
+│       └── normalized_tool_call.rb
+└── spec/
+    ├── fixtures/copilot_history/current_cli_schema_compatibility/
+    └── lib/copilot_history/
+        ├── current_session_reader_spec.rb
+        ├── event_normalizer_spec.rb
+        ├── projections/conversation_projector_spec.rb
+        ├── projections/activity_projector_spec.rb
+        └── api/presenters/
+            ├── session_index_presenter_spec.rb
+            └── session_detail_presenter_spec.rb
 
 frontend/
 └── src/features/sessions/
-    ├── api/sessionApi.types.ts                  # timeline DTO 型
-    ├── presentation/timelineContent.ts          # content block と tool detail 変換
-    ├── presentation/timelineContent.test.ts     # canonical helper field の描画確認
-    ├── components/TimelineContent.tsx           # tool request / detail summary 描画
-    ├── components/TimelineEntry.tsx             # event badge と degraded 表示
-    └── pages/SessionDetailPage.test.tsx         # current / legacy 共通読取体験の画面確認
+    ├── api/sessionApi.types.ts
+    ├── api/sessionApi.ts
+    ├── presentation/
+    │   ├── conversationContent.ts
+    │   ├── timelineContent.ts
+    │   └── formatters.ts
+    ├── components/
+    │   ├── ConversationTranscript.tsx
+    │   ├── ActivityTimeline.tsx
+    │   ├── TimelineContent.tsx
+    │   ├── TimelineEntry.tsx
+    │   ├── SessionSummaryCard.tsx
+    │   └── IssueList.tsx
+    └── pages/
+        ├── SessionIndexPage.tsx
+        └── SessionDetailPage.tsx
+
+frontend の test files は実装近接配置の既存 pattern に従う:
+`sessionApi.test.ts`, `conversationContent.test.ts`, `TimelineContent.test.tsx`, `ConversationTranscript.test.tsx`, `ActivityTimeline.test.tsx`, `SessionSummaryCard.test.tsx`, `SessionDetailPage.test.tsx`, and `SessionIndexPage.test.tsx`.
 ```
 
 ### Modified Files
-- `backend/lib/copilot_history/current_session_reader.rb` — line 単位 read は維持しつつ、current schema fixture に合わせた issue 収集を明確化する
-- `backend/lib/copilot_history/event_normalizer.rb` — current envelope と legacy flat payload の両方を canonical fields へ変換する
-- `backend/lib/copilot_history/errors/read_error_code.rb` — 現行 code を継続利用し、current schema の partial / unknown にも適用する前提を明示する
-- `backend/lib/copilot_history/types/normalized_event.rb` — `kind`, `mapping_status`, `tool_calls`, `detail` を持てる canonical event へ拡張する
-- `backend/lib/copilot_history/api/presenters/session_detail_presenter.rb` — frontend が raw payload に依存せず読める helper field を追加する
-- `frontend/src/features/sessions/api/sessionApi.types.ts` — `mapping_status`、tool call summary、detail summary を型定義する
-- `frontend/src/features/sessions/presentation/timelineContent.ts` — canonical helper field を優先して表示 block を生成する
-- `frontend/src/features/sessions/components/TimelineContent.tsx` — tool request と detail summary を通常本文と別セクションで表示する
-- `frontend/src/features/sessions/components/TimelineEntry.tsx` — `kind` と `mapping_status` を併用し、`detail` / `unknown` と部分互換を区別して示す
+- `backend/lib/copilot_history/current_session_reader.rb` - event timestamp と `events.jsonl` mtime を使った current `updated_at` 補正、workspace-only issue の扱い、line 単位 issue 継続を明確化する
+- `backend/lib/copilot_history/legacy_session_reader.rb` - legacy message が conversation projector へ入る canonical fields を維持し、legacy 回帰 fixture を追加する
+- `backend/lib/copilot_history/event_normalizer.rb` - current `user.message` / `assistant.message` / `system.message`、tool request、detail event、unknown event の分類規則を固定する
+- `backend/lib/copilot_history/types/normalized_event.rb` - full timeline 用 canonical event を保持し、conversation / activity projection の入力 contract とする
+- `backend/lib/copilot_history/types/normalized_tool_call.rb` - tool 名、入力要約、truncation、partial 状態の contract を維持する
+- `backend/lib/copilot_history/types/normalized_session.rb` - corrected `updated_at` と projection 入力に必要な source state を保持する
+- `backend/app/controllers/api/sessions_controller.rb` - `include_raw` query parameter を boolean として解釈し、detail presenter へ渡す
+- `backend/lib/copilot_history/api/session_index_query.rb` - current / legacy 混在時の sort が corrected `updated_at` を使うことを保証する
+- `backend/lib/copilot_history/api/presenters/session_index_presenter.rb` - `conversation_summary` と workspace-only / degraded 識別情報を返す
+- `backend/lib/copilot_history/api/presenters/session_detail_presenter.rb` - `conversation`、`activity`、`timeline`、raw inclusion policy を明示した detail DTO を返す
+- `backend/lib/copilot_history/errors/read_error_code.rb` - current schema の partial / unknown / workspace-only / raw omission に既存 code または最小追加 code を割り当てる
+- `frontend/src/features/sessions/api/sessionApi.types.ts` - conversation / activity / raw inclusion の DTO を TypeScript union と interface で定義する
+- `frontend/src/features/sessions/api/sessionApi.ts` - `include_raw` 明示要求と通常 detail 取得を typed client として分ける
+- `frontend/src/features/sessions/hooks/useSessionDetail.ts` - 通常 detail と raw 明示要求を区別して取得できる state / action を提供する
+- `frontend/src/features/sessions/presentation/conversationContent.ts` - message content、code block、tool hint を conversation entry から生成する
+- `frontend/src/features/sessions/presentation/timelineContent.ts` - activity detail と fallback timeline 表示の helper に限定する
+- `frontend/src/features/sessions/components/ConversationTranscript.tsx` - detail 画面の主表示として user / assistant の会話を表示し、空状態を示す
+- `frontend/src/features/sessions/components/ActivityTimeline.tsx` - detail / unknown / tool execution などを初期折りたたみで表示する
+- `frontend/src/features/sessions/components/SessionSummaryCard.tsx` - 会話有無、会話数、preview、workspace-only 状態、補正済み更新時刻を表示する
+- `frontend/src/features/sessions/pages/SessionDetailPage.tsx` - conversation first、activity secondary、raw explicit action の画面構成へ変更する
 
 ## System Flows
 
@@ -136,80 +187,105 @@ frontend/
 sequenceDiagram
     participant UI as Frontend UI
     participant API as Sessions API
-    participant Query as SessionDetailQuery
-    participant Reader as CurrentSessionReader
-    participant Norm as EventNormalizer
-    participant Presenter as SessionDetailPresenter
+    participant Query as Detail query
+    participant Reader as Session reader
+    participant Norm as Event normalizer
+    participant Conv as Conversation projector
+    participant Act as Activity projector
+    participant Presenter as Detail presenter
 
-    UI->>API: GET session detail
-    API->>Query: call session id
-    Query->>Reader: read current session
-    Reader->>Norm: normalize each jsonl line
-    Norm-->>Reader: canonical event and issues
+    UI->>API: include_raw 任意指定つき session detail request
+    API->>API: include_raw query parameter を正規化
+    API->>Query: resolve session id
+    Query->>Reader: read source files
+    Reader->>Norm: normalize each event
+    Norm-->>Reader: canonical events and issues
     Reader-->>Query: normalized session
-    Query->>Presenter: present found session
-    Presenter-->>UI: common timeline contract
+    Query->>Conv: derive transcript
+    Query->>Act: derive activity
+    Query->>Presenter: include_raw flag つきで detail を整形
+    Presenter-->>UI: conversation first DTO
 ```
 
 **Flow decisions**
-- `events.jsonl` は line 単位で読み、1 line failure が session 全体 failure に昇格しないようにする。
-- non-message event も sequence を保ったまま timeline へ残し、message event と visually 別扱いにする。
-- frontend は source format を見ず、API helper field と issue 情報だけで描画する。
+- `events.jsonl` は line 単位で読み、1 line の parse failure を session 全体 failure に昇格させない。
+- `conversation.entries` は主会話だけを含め、完全 event log は `timeline` と `activity.entries` に残す。
+- raw payload は通常 detail では返さず、controller が `include_raw=true` を受け取った場合だけ presenter が timeline / activity の raw payload field に値を入れる。
+- `include_raw` は `true` の文字列だけを明示要求として扱い、それ以外の値または未指定は通常 detail と同じ `false` とする。
 
 ## Requirements Traceability
 
 | Requirement | Summary | Components | Interfaces | Flows |
 |-------------|---------|------------|------------|-------|
-| 1.1 | current 会話 event の識別 | EventNormalizer, NormalizedEvent | canonical timeline event | session detail flow |
-| 1.2 | current / legacy の本文共通読取 | EventNormalizer, SessionDetailPresenter, TimelineContent | session detail DTO | session detail flow |
-| 1.3 | 部分欠損 event の区別 | EventNormalizer, ReadErrorCode, TimelineEntry | `mapping_status`, issue contract | session detail flow |
-| 1.4 | legacy 読取体験の維持 | EventNormalizer, SessionDetailPresenter | common timeline DTO | session detail flow |
-| 2.1 | 本文の改行と code block 読解 | SessionDetailPresenter, timelineContent | `content` field | session detail flow |
-| 2.2 | tool 名と入力要約の分離表示 | EventNormalizer, NormalizedToolCall, TimelineContent | `tool_calls` DTO | session detail flow |
-| 2.3 | 欠損 tool 情報の部分保持 | EventNormalizer, ReadErrorCode | `tool_calls.status`, `issues` | session detail flow |
-| 2.4 | tool 情報が本文順序を壊さない | EventNormalizer, TimelineContent | canonical timeline event | session detail flow |
-| 3.1 | 非会話 event の誤認防止 | EventNormalizer, TimelineEntry | `kind=detail|unknown`, `detail` | session detail flow |
-| 3.2 | 主タイムライン優先で detail 保持 | SessionDetailPresenter, TimelineContent, TimelineEntry | `detail` helper field | session detail flow |
-| 3.3 | 未対応形状の unknown 保持 | EventNormalizer, ReadErrorCode | `kind=unknown`, `raw_payload`, `issues` | session detail flow |
-| 3.4 | 非会話 event が順序を崩さない | CurrentSessionReader, EventNormalizer | `sequence` field | session detail flow |
-| 4.1 | current / legacy 共通契約 | SessionDetailPresenter, sessionApi.types | session detail DTO | session detail flow |
-| 4.2 | schema 切替不要の UI | sessionApi.types, TimelineContent, TimelineEntry | frontend typed contract | session detail flow |
-| 4.3 | 項目未提供と読取失敗の区別 | EventNormalizer, SessionDetailPresenter | nullable helper fields, `mapping_status`, issues | session detail flow |
-| 4.4 | current 対応で legacy 後退を防ぐ | backend specs, frontend specs | regression spec suite | session detail flow |
-| 5.1 | 部分互換の識別 | EventNormalizer, SessionDetailPresenter, TimelineEntry | degraded + `mapping_status` + issues | session detail flow |
-| 5.2 | 未知形状を issue として可視化 | ReadErrorCode, EventNormalizer, IssueList | issue contract | session detail flow |
-| 5.3 | 読める範囲と不確実範囲の説明 | SessionDetailPresenter, TimelineEntry, IssueList | session / event issues | session detail flow |
-| 5.4 | 劣化時も閲覧継続 | CurrentSessionReader, EventNormalizer, SessionDetailPresenter | partial success contract | session detail flow |
+| 1.1 | current 会話 event の抽出 | EventNormalizer, ConversationProjector | `NormalizedConversationEntry` | detail flow |
+| 1.2 | event 発生順の保持 | CurrentSessionReader, ConversationProjector | `sequence`, `occurred_at` | detail flow |
+| 1.3 | 空 assistant tool request の除外 | ConversationProjector, EventNormalizer | `content`, `tool_calls` | detail flow |
+| 1.4 | system/detail/unknown の主会話除外 | EventNormalizer, ActivityProjector | `kind`, `activity.category` | detail flow |
+| 1.5 | legacy 会話表示の維持 | LegacySessionReader, ConversationProjector, regression specs | common conversation DTO | detail flow |
+| 2.1 | 詳細初期表示を会話にする | SessionDetailPresenter, ConversationTranscript | `conversation.entries` | detail flow |
+| 2.2 | 会話なし空状態 | ConversationProjector, ConversationTranscript | `conversation.empty_reason` | detail flow |
+| 2.3 | transcript を timeline より優先 | SessionDetailPage | `conversation`, `timeline` | detail flow |
+| 2.4 | transcript 未提供時 fallback | conversationContent, SessionDetailPage | timeline-derived fallback | detail flow |
+| 2.5 | 改行/code/長文保持 | ConversationTranscript, conversationContent | content blocks | detail flow |
+| 3.1 | 内部 activity 分類 | EventNormalizer, ActivityProjector | `activity.entries` | detail flow |
+| 3.2 | 内部 activity を会話に混在させない | ConversationProjector, ConversationTranscript | role filter | detail flow |
+| 3.3 | activity は初期状態で邪魔しない | ActivityTimeline, SessionDetailPage | collapsed state | detail flow |
+| 3.4 | unknown raw 追跡 | EventNormalizer, ActivityProjector, SessionDetailPresenter | issue + raw ref | detail flow |
+| 3.5 | activity が会話順序を崩さない | ConversationProjector | stable sequence sort | detail flow |
+| 4.1 | 本文付き assistant の tool 付帯情報 | EventNormalizer, ConversationProjector | `tool_calls` | detail flow |
+| 4.2 | tool 名と入力要約 | NormalizedToolCall, ConversationTranscript | `name`, `arguments_preview` | detail flow |
+| 4.3 | 欠損 tool 情報の部分保持 | EventNormalizer, IssueList | `status=partial`, issues | detail flow |
+| 4.4 | execution event は activity | EventNormalizer, ActivityProjector | `activity.category=tool_execution` | detail flow |
+| 4.5 | tool 完全相関は不要 | EventNormalizer, ActivityProjector | no correlation invariant | detail flow |
+| 5.1 | 一覧で会話有無を判断 | SessionIndexPresenter, SessionSummaryCard | `conversation_summary.has_conversation` | index flow |
+| 5.2 | 一覧で会話数を表示 | ConversationProjector, SessionIndexPresenter | `message_count` | index flow |
+| 5.3 | preview は会話本文から生成 | ConversationProjector, SessionSummaryCard | `preview` | index flow |
+| 5.4 | workspace-only current session 識別 | CurrentSessionReader, SessionIndexPresenter | `source_state` | index flow |
+| 5.5 | degraded / legacy 一覧回帰防止 | SessionIndexPresenter, regression specs | common summary DTO | index flow |
+| 6.1 | event timestamp を更新時刻に反映 | CurrentSessionReader, SessionIndexQuery | corrected `updated_at` | index flow |
+| 6.2 | file mtime fallback | CurrentSessionReader | source artifact stat | index flow |
+| 6.3 | workspace metadata fallback | CurrentSessionReader, LegacySessionReader | created/updated fallback | index flow |
+| 6.4 | current / legacy の一貫表示 | SessionIndexQuery, SessionSummaryCard | common `updated_at` semantics | index flow |
+| 7.1 | raw 量に主会話が依存しない | SessionDetailPresenter, ConversationTranscript | 通常 detail では raw を入れない | detail flow |
+| 7.2 | 明示要求時 raw 確認 | SessionDetailPresenter, sessionApi | `include_raw` contract | detail flow |
+| 7.3 | raw 省略でも分類を失わない | EventNormalizer, ActivityProjector | helper fields + raw ref | detail flow |
+| 7.4 | unknown 追跡可能性維持 | ActivityProjector, IssueList | raw availability + issue | detail flow |
+| 8.1 | 部分解釈の識別 | EventNormalizer, SessionDetailPresenter | `mapping_status=partial` | detail flow |
+| 8.2 | unknown / 読取不足を issue 化 | ReadErrorCode, IssueList | `event.unknown_shape`, read issues | detail flow |
+| 8.3 | 読める範囲と不確実範囲の説明 | ConversationTranscript, ActivityTimeline, IssueList | per-session/event issues | detail flow |
+| 8.4 | 劣化時も閲覧継続 | CurrentSessionReader, LegacySessionReader, presenters | partial success contract | index/detail flow |
+| 8.5 | legacy 体験の回帰防止 | regression specs, presenters, frontend tests | common DTO | index/detail flow |
 
 ## Components and Interfaces
 
 | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies | Contracts |
 |-----------|--------------|--------|--------------|------------------|-----------|
-| CurrentSessionReader | Backend reader | `workspace.yaml` と `events.jsonl` を読み、line 単位で正規化を進める | 1.2, 3.4, 5.4 | EventNormalizer P0 | Service |
-| SessionDetailQuery | Backend orchestration | session source を解決して適切な reader を呼び、`NormalizedSession` を controller へ渡す | 4.1, 4.4, 5.4 | SessionSourceCatalog P0, CurrentSessionReader P0, LegacySessionReader P0 | Service |
-| EventNormalizer | Backend normalization | current / legacy event を canonical timeline event に統一する | 1.1, 1.3, 2.2, 3.1, 3.3, 5.1, 5.2 | ReadErrorCode P0, NormalizedEvent P0 | Service |
-| SessionDetailPresenter | Backend API | canonical event を frontend 共通 DTO へ変換する | 1.2, 2.1, 3.2, 4.1, 4.3, 5.3 | NormalizedSession P0 | API |
-| TimelineContent formatter | Frontend presentation | canonical `content`, `tool_calls`, `detail` を視覚 block へ変換する | 2.1, 2.2, 2.4, 3.2, 4.2 | sessionApi.types P0 | Service |
-| TimelineEntry UI | Frontend UI | kind と `mapping_status` の差を表示し、degraded / issue を event 単位で示す | 1.3, 3.1, 4.2, 5.1, 5.3 | TimelineContent formatter P0, IssueList P1 | State |
+| CurrentSessionReader | Backend reader | current raw files から corrected session を作る | 1.2, 5.4, 6.1, 6.2, 6.3, 8.4 | EventNormalizer P0 | Service |
+| EventNormalizer | Backend normalization | raw event を message/detail/unknown に分類する | 1.1, 1.4, 3.1, 4.1, 4.2, 4.3, 4.4, 8.1, 8.2 | NormalizedEvent P0 | Service |
+| ConversationProjector | Backend projection | 主会話 transcript と index summary を派生する | 1.1, 1.2, 1.3, 1.5, 2.2, 3.2, 5.1, 5.2, 5.3 | NormalizedSession P0 | Service |
+| ActivityProjector | Backend projection | detail/unknown/tool execution を補助 activity に分離する | 3.1, 3.3, 3.4, 3.5, 4.4, 7.3, 7.4 | NormalizedSession P0 | Service |
+| SessionIndexPresenter | Backend API | 会話有無、会話数、preview、更新時刻を一覧 DTO に出す | 5.1, 5.2, 5.3, 5.4, 5.5, 6.4 | ConversationProjector P0 | API |
+| SessionDetailPresenter | Backend API | conversation first detail と raw inclusion policy を返す | 2.1, 2.3, 7.1, 7.2, 8.3 | ConversationProjector P0, ActivityProjector P0 | API |
+| ConversationTranscript | Frontend UI | 主会話を最初に表示する | 2.1, 2.2, 2.5, 4.1, 4.2, 4.3 | sessionApi.types P0 | State |
+| ActivityTimeline | Frontend UI | 内部 activity と unknown を補助表示する | 3.1, 3.3, 3.4, 4.4, 8.3 | sessionApi.types P0 | State |
+| SessionSummaryCard | Frontend UI | 一覧で会話あり session を選べる情報を出す | 5.1, 5.2, 5.3, 5.4, 6.4 | sessionApi.types P0 | State |
 
-### Backend reader and normalization
+### Backend Reader And Normalization
 
 #### CurrentSessionReader
 
 | Field | Detail |
 |-------|--------|
-| Intent | current session の raw files を line 単位で読み、読めた範囲を失わず `NormalizedSession` を返す |
-| Requirements | 1.2, 3.4, 5.4 |
+| Intent | current session の `workspace.yaml` と `events.jsonl` を読み、補正済み metadata と canonical event を返す |
+| Requirements | 1.2, 5.4, 6.1, 6.2, 6.3, 8.4 |
 
 **Responsibilities & Constraints**
-- `workspace.yaml` の失敗と `events.jsonl` の部分失敗を区別する
-- `events.jsonl` の行順を `sequence` として保持する
-- 1 行の parse failure や unknown shape が session 全体 failure へ波及しない
-
-**Dependencies**
-- Outbound: `EventNormalizer` — line payload の canonicalization (P0)
-- Outbound: `CopilotHistory::Types::NormalizedSession` — session 組み立て (P0)
-- Outbound: `CopilotHistory::Types::ReadIssue` — session / event issue 蓄積 (P0)
+- `events.jsonl` が存在しない current directory を workspace-only source として扱い、通常会話 session と区別できる `source_state=workspace_only` と専用 issue を返す。
+- event timestamp の最大値を current session の利用者向け `updated_at` として優先する。
+- event timestamp がない場合は `events.jsonl` mtime、次に workspace metadata の `updated_at` / `created_at` を fallback にする。
+- JSONL の 1 行 parse failure は session 全体 failure にしない。
+- `source_state` は reader が決定する。current source は `events.jsonl` 欠如だけなら `workspace_only`、読取/parse/normalization issue が 1 件以上あれば `degraded`、それ以外を `complete` とする。workspace parse failure と events 欠如が同時に起きる場合は `degraded` を優先する。
+- `LegacySessionReader` は既存 reader の成功 path では `complete` を返し、legacy 読取 issue がある場合だけ `degraded` とする。
 
 **Contracts**: Service [x] / API [ ] / Event [ ] / Batch [ ] / State [ ]
 
@@ -219,40 +295,25 @@ class CopilotHistory::CurrentSessionReader
   def call(source) => CopilotHistory::Types::NormalizedSession
 end
 ```
-- Preconditions:
-  - `source.format` は `:current`
-  - `artifact_paths[:events]` が `events.jsonl` を指す
-- Postconditions:
-  - 読めた event は source 順で `events` に入る
-  - session issue と event issue は `issues` に統合される
-- Invariants:
-  - unreadable line や unknown event があっても `events` の既読部分は保持する
-
-**Implementation Notes**
-- Integration: 既存の line iteration を保ち、cross event correlation は導入しない
-- Validation: current fixture の正常系、partial mapping、unknown、invalid JSONL を spec で固定する
-- Risks: error message が抽象的すぎると運用切り分けが難しいため raw type を含む説明を優先する
+- Preconditions: `source.format == :current`
+- Postconditions: 読めた event は source order の `sequence` を保持する。`updated_at` は補正済み時刻になり、`source_state` は上記優先順位で設定される。
+- Invariants: workspace-only、invalid line、unknown event があっても読める範囲は保持する。workspace-only は空成功ではなく issue と `source_state` で識別できる。
 
 #### EventNormalizer
 
 | Field | Detail |
 |-------|--------|
-| Intent | current / legacy の raw event を共通の timeline event taxonomy へ変換する |
-| Requirements | 1.1, 1.3, 2.2, 2.3, 3.1, 3.3, 5.1, 5.2 |
+| Intent | current / legacy raw event を canonical event taxonomy に統一する |
+| Requirements | 1.1, 1.4, 3.1, 4.1, 4.2, 4.3, 4.4, 8.1, 8.2 |
 
 **Responsibilities & Constraints**
-- `kind` は `message`, `detail`, `unknown` の 3 taxonomy に限定し、不完全さは `mapping_status` で表す
-- `mapping_status` は `complete` または `partial` とし、role / content / timestamp / tool summary の欠損を kind から分離して表す
-- current conversation event は root `type` と `data` から、legacy conversation event は flat payload から同じ field を抽出する
-- non-message event のうち既知 type 群は `detail` として summary を与え、未対応形状のみ `unknown` にする
-- tool request summary は `NormalizedToolCall` に正規化し、secret-like key の redact と長さ制限を適用する
-- raw payload は常に保持し、silent drop を行わない
-
-**Dependencies**
-- Inbound: `CurrentSessionReader` — source format と sequence の供給 (P0)
-- Outbound: `CopilotHistory::Errors::ReadErrorCode` — partial / unknown issue code (P0)
-- Outbound: `CopilotHistory::Types::NormalizedEvent` — canonical event 生成 (P0)
-- Outbound: `CopilotHistory::Types::NormalizedToolCall` — tool summary 生成 (P0)
+- `kind` は `message`, `detail`, `unknown` に限定する。
+- current message は root `type` と `data` から role、content、timestamp、tool requests を抽出する。
+- `system.message` は canonical event としては保持するが、conversation projector では主会話に入れない。
+- `assistant.message` の content が空または `null` で tool request のみの場合、message event として保持しつつ主 conversation entry は作らない。
+- `assistant.turn_*`, `tool.execution_*`, `hook.*`, `skill.invoked` は `detail` として分類する。
+- unknown shape は raw payload を保持し、warning issue を出す。
+- tool arguments preview は表示用要約に限定し、secret-like key を redact し、長さ制限を適用する。
 
 **Contracts**: Service [x] / API [ ] / Event [ ] / Batch [ ] / State [ ]
 
@@ -262,252 +323,238 @@ class CopilotHistory::EventNormalizer
   def call(raw_event:, source_format:, sequence:) => CopilotHistory::Types::NormalizationResult
 end
 ```
-- Preconditions:
-  - `raw_event` は JSON parse 済み value
-  - `source_format` は `:current` または `:legacy`
-- Postconditions:
-  - 返る event は canonical kind を持つ
-  - 不完全な mapping は `mapping_status=partial` と対応 issue を返す
-  - 未対応形状は `kind=unknown` と対応 issue を返す
-- Invariants:
-  - `raw_payload` は元イベントを保持する
-  - current / legacy の format 差分は frontend へ漏らさない
+- Preconditions: `source_format` は `:current` または `:legacy`
+- Postconditions: event と issue は同じ `sequence` で関連付けられる。
+- Invariants: raw payload は分類成功/失敗にかかわらず保持される。
 
-**Canonical Event Contract**
+### Backend Projection
 
-| Field | Type | Meaning |
-|-------|------|---------|
-| `sequence` | Integer | `events.jsonl` または legacy transcript 内の順序 |
-| `kind` | `message \| detail \| unknown` | timeline 上の意味分類 |
-| `mapping_status` | `complete \| partial` | canonical helper field が十分に埋まったか |
-| `raw_type` | String | 元 event type |
-| `occurred_at` | Time or nil | root または payload から読めた発生時刻 |
-| `role` | String or nil | `user`, `assistant`, `system` などの会話 role |
-| `content` | String or nil | 会話本文 |
-| `tool_calls` | `NormalizedToolCall[]` | assistant message から抽出した tool request |
-| `detail` | Hash or nil | `category`, `title`, `body` を持つ detail summary |
-| `raw_payload` | Hash or Array or scalar | 元 payload |
+#### ConversationProjector
 
-**Tool Call Contract**
+| Field | Detail |
+|-------|--------|
+| Intent | normalized events から主会話 transcript と一覧 summary を派生する |
+| Requirements | 1.1, 1.2, 1.3, 1.5, 2.2, 3.2, 5.1, 5.2, 5.3 |
 
-| Field | Type | Meaning |
-|-------|------|---------|
-| `name` | String or nil | tool 名。取得できない場合は `nil` |
-| `arguments_preview` | String or nil | redact / truncation 済みの入力要約 |
-| `is_truncated` | Boolean | 要約が上限で切り詰められたか |
-| `status` | `complete \| partial` | tool summary 単位の完全性 |
+**Responsibilities & Constraints**
+- `kind == :message` かつ `role` が `user` または `assistant` で、非空 `content` を持つ event だけを transcript entry にする。
+- `system`、`detail`、`unknown` は transcript entry にしない。
+- transcript order は event `sequence` 昇順で固定する。
+- assistant の本文付き entry には event の `tool_calls` を付帯情報として渡す。
+- summary preview は最初に見つかった user または assistant の本文から生成し、activity 本文は使わない。
 
-- `arguments_preview` は compact JSON もしくは文字列化した入力から生成し、`token`, `secret`, `password`, `authorization`, `cookie` を key 名に含む項目は `[REDACTED]` へ置換する
-- `arguments_preview` は最大 240 文字とし、超過時は末尾を切り詰めて `is_truncated=true` にする
-- tool 名欠損または入力要約生成不可のときは、保持できた値だけ残して `status=partial` と warning issue を返す
+**Contracts**: Service [x] / API [ ] / Event [ ] / Batch [ ] / State [ ]
 
-**Detail Classification Rules**
-- `assistant.turn_start`, `assistant.turn_end` → `detail.category = assistant_turn`
-- `tool.execution_start`, `tool.execution_complete` → `detail.category = tool_execution`
-- `hook.start`, `hook.end` → `detail.category = hook`
-- `skill.invoked` → `detail.category = skill`
-- 上記以外の非会話 event → `unknown`
+##### Service Interface
+```ruby
+class CopilotHistory::Projections::ConversationProjector
+  def call(session) => CopilotHistory::Types::ConversationProjection
+end
+```
+- Postconditions: `message_count == entries.length`。空の場合は `empty_reason` が設定される。
+- Invariants: projection は read-only で、`NormalizedSession` を変更しない。
 
-**Implementation Notes**
-- Integration: role は `data.role` がなければ `type` prefix から補完する
-- Validation: assistant message の `toolRequests` 欠損時も本文を維持し、必要時のみ `mapping_status=partial` の issue を出す
-- Risks: current schema の将来追加 type に備え、classifier は closed list と unknown fallback の組み合わせにする
+#### ActivityProjector
+
+| Field | Detail |
+|-------|--------|
+| Intent | 主会話ではない event を調査可能な activity に分離する |
+| Requirements | 3.1, 3.3, 3.4, 3.5, 4.4, 7.3, 7.4 |
+
+**Responsibilities & Constraints**
+- `detail` と `unknown` event は activity entry にする。
+- `system.message` は会話本文ではなく activity entry として表示できる。
+- `tool.execution_*` は assistant 発話へ相関できてもできなくても activity に留める。
+- raw payload が通常 detail で省略されても、source path、sequence、raw type、issue によって追跡できる。
+
+**Contracts**: Service [x] / API [ ] / Event [ ] / Batch [ ] / State [ ]
+
+### Backend API
+
+#### SessionIndexPresenter
+
+| Field | Detail |
+|-------|--------|
+| Intent | session list に会話有無と補正済み更新時刻を出す |
+| Requirements | 5.1, 5.2, 5.3, 5.4, 5.5, 6.4 |
+
+**Contracts**: Service [ ] / API [x] / Event [ ] / Batch [ ] / State [ ]
+
+##### API Contract
+| Field | Type | Description |
+|-------|------|-------------|
+| `conversation_summary.has_conversation` | boolean | 主会話 transcript が 1 件以上ある |
+| `conversation_summary.message_count` | number | 主会話 entry 数 |
+| `conversation_summary.preview` | string or null | user / assistant 本文から生成した短い preview |
+| `conversation_summary.activity_count` | number | 主会話以外の activity 数 |
+| `source_state` | string | `complete`, `workspace_only`, `degraded` のいずれか |
+| `updated_at` | string or null | event timestamp / file mtime / workspace metadata の順で補正した更新時刻 |
 
 #### SessionDetailPresenter
 
 | Field | Detail |
 |-------|--------|
-| Intent | `NormalizedSession` を current / legacy 共通の session detail DTO へ変換する |
-| Requirements | 1.2, 2.1, 3.2, 4.1, 4.3, 5.3 |
-
-**Responsibilities & Constraints**
-- frontend が raw payload 深掘りなしで描画できる helper field を追加する
-- session issue と event issue の責務境界を維持する
-- `EventNormalizer` が決めた `kind`, `mapping_status`, `tool_calls`, `detail` を再解釈しない
-- `raw_payload` は残しつつ、primary UI は canonical helper field を使えるようにする
-
-**Dependencies**
-- Inbound: `NormalizedSession` — canonical session model (P0)
-- Outbound: frontend session detail DTO — JSON response shape (P0)
+| Intent | 通常 detail を conversation first にし、raw detail は明示要求に分離する |
+| Requirements | 2.1, 2.3, 7.1, 7.2, 8.3 |
 
 **Contracts**: Service [ ] / API [x] / Event [ ] / Batch [ ] / State [ ]
 
 ##### API Contract
 | Method | Endpoint | Request | Response | Errors |
 |--------|----------|---------|----------|--------|
-| GET | `/api/sessions/:id` | none | `SessionDetailResponse` with extended timeline items | existing root failure and not found |
+| GET | `/api/sessions/:id` | none | raw payload を含まない session detail | 404, root failure |
+| GET | `/api/sessions/:id?include_raw=true` | explicit raw request | raw payload field に値を入れた session detail | 404, root failure |
 
-**Session timeline DTO additions**
+**Controller / presenter contract**
+- `SessionsController#show` は `params[:include_raw] == "true"` を `include_raw:` として `SessionDetailPresenter#call` へ渡す。
+- `SessionDetailQuery` は session 解決だけを継続して担当し、raw inclusion policy を所有しない。
+- `SessionDetailPresenter#call(result:, include_raw: false)` は通常 detail と raw 付き detail で同じ top-level DTO shape を返す。
+- `include_raw` が false の場合、timeline / activity entries の `raw_payload` は `nil` にし、`raw_included=false` を返す。
+- `include_raw` が true の場合、timeline / activity entries の `raw_payload` に `NormalizedEvent#raw_payload` を入れ、`raw_included=true` を返す。
 
-| Field | Type | Purpose |
-|-------|------|---------|
-| `tool_calls` | array | 固定 shape の tool summary を source format 非依存で返す |
-| `detail` | object or null | non-message event の category と summary を返す |
-| `kind` | string | `message \| detail \| unknown` の 3 taxonomy を返す |
-| `mapping_status` | string | `complete \| partial` を返し、意味分類と劣化状態を分離する |
+**Response shape**
+- `conversation.entries`: user / assistant transcript entries
+- `conversation.empty_reason`: `no_events`, `no_conversation_messages`, `events_unavailable` のいずれか、または `null`
+- `activity.entries`: system/detail/unknown/internal activity entries
+- `timeline.events`: complete event order for compatibility and fallback, raw payload is `nil` by default
+- `raw_included`: response が raw payload を含むかを示す boolean
+- `issues`: session-level issue。event-level issue は該当 `conversation`, `activity`, `timeline` entry にも紐づく
 
-**`tool_calls[*]` DTO**
+**Frontend raw request contract**
+- `sessionApi.fetchSessionDetail(sessionId, signal)` は通常 detail を取得し、`include_raw` を付けない。
+- `sessionApi.fetchSessionDetailWithRaw(sessionId, signal)` または同等の typed option は `/api/sessions/:id?include_raw=true` を取得する。
+- `useSessionDetail` は初回表示で通常 detail だけを取得し、raw 明示 action が呼ばれた場合だけ raw 付き detail を再取得する。
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `name` | string \| null | UI は `null` の場合に "unknown tool" などの中立ラベルを使う |
-| `arguments_preview` | string \| null | redact / truncation 済みの表示専用文字列 |
-| `is_truncated` | boolean | preview が上限到達したか |
-| `status` | `'complete' \| 'partial'` | 欠損がある summary を識別する |
+### Frontend Presentation
 
-**Implementation Notes**
-- Integration: session index DTO は変更しない
-- Validation: presenter spec で legacy と current の両方に同じ primary field が存在することを固定する
-- Risks: DTO 追加により frontend type 更新が必須になるため、同一 task wave で進める
-
-### Frontend presentation
-
-#### TimelineContent formatter
+#### ConversationTranscript
 
 | Field | Detail |
 |-------|--------|
-| Intent | canonical timeline event を本文 block、tool block、detail block へ分解する |
-| Requirements | 2.1, 2.2, 2.4, 3.2, 4.2 |
+| Intent | detail 画面の最初の主表示として会話 transcript を描画する |
+| Requirements | 2.1, 2.2, 2.5, 4.1, 4.2, 4.3 |
 
 **Responsibilities & Constraints**
-- `content` の code fence 分解を継続する
-- `tool_calls` を通常本文とは別 block として出す
-- `detail` がある event は message block と混同しない表示 model に変換する
-- source format や raw payload path に依存しない
+- `conversation.entries` があれば page の最初の content section として表示する。
+- entry が空なら空状態を表示し、activity や raw payload の量で主表示を埋めない。
+- 改行、コードブロック、長い本文は既存の readable block 表示を維持する。
+- tool request は assistant 本文内の付帯情報として、本文とは別の block で表示する。
 
-**Dependencies**
-- Inbound: `SessionTimelineEvent` — API からの typed contract (P0)
-- Outbound: `TimelineContent` component — visual block model (P0)
-
-**Contracts**: Service [x] / API [ ] / Event [ ] / Batch [ ] / State [ ]
-
-##### Service Interface
-```typescript
-interface TimelineContentModel {
-  blocks: readonly TimelineVisualBlock[]
-}
-
-declare function formatTimelineContent(
-  event: Pick<SessionTimelineEvent, 'kind' | 'content' | 'tool_calls' | 'detail'>
-): TimelineContentModel
-```
-- Preconditions:
-  - event は presenter の canonical DTO に従う
-- Postconditions:
-  - 本文、tool hint、detail summary は UI 表示順を壊さず block 化される
-- Invariants:
-  - raw payload の format 差分を参照しない
-
-**Implementation Notes**
-- Integration: 既存 code fence parsing を流用しつつ、tool block と detail block を追加する
-- Validation: current tool request と unknown detail を混在させた test fixture で順序を固定する
-- Risks: detail block を過剰に増やすと主会話が読みにくくなるため summary を短く保つ
-
-#### TimelineEntry UI
+#### ActivityTimeline
 
 | Field | Detail |
 |-------|--------|
-| Intent | event kind と degraded 状態を視覚的に区別し、issue を event 単位で読めるようにする |
-| Requirements | 1.3, 3.1, 4.2, 5.1, 5.3 |
+| Intent | 内部 activity と unknown event を会話から分離して確認可能にする |
+| Requirements | 3.1, 3.3, 3.4, 4.4, 8.3 |
 
 **Responsibilities & Constraints**
-- `message`, `detail`, `unknown` を badge で区別する
-- `mapping_status=partial` は secondary badge や tone で補助表示し、kind と混同しない
-- role badge は `message` のみで利用し、detail では category summary を優先する
-- issue list は event ごとに維持する
-
-**Dependencies**
-- Inbound: `TimelineContent` — block 表示 (P0)
-- Inbound: `IssueList` — degraded 情報表示 (P1)
-
-**Contracts**: Service [ ] / API [ ] / Event [ ] / Batch [ ] / State [x]
-
-##### State Management
-- State model: `SessionDetailPage` が受け取った immutable DTO をそのまま描画する
-- Persistence & consistency: frontend local state 追加なし
-- Concurrency strategy: 詳細取得中・取得後の既存 hook 振る舞いを維持する
-
-**Implementation Notes**
-- Integration: 既存の `TimelineEntry.tsx` を拡張し、画面全体の routing や data fetch flow は変更しない
-- Validation: degraded current session と clean legacy session の両描画を page test で確認する
-- Risks: detail event の視認性が高すぎると会話本文が埋もれるため、message より控えめな視覚強度に留める
+- 初期状態では主会話の下に折りたたみまたは控えめな secondary section として置く。
+- `detail.category`, `raw_type`, `mapping_status`, issue を表示し、message と混同させない。
+- raw payload は通常表示しない。明示要求後に API response が raw を含む場合だけ詳細として参照する。
 
 ## Data Models
 
 ### Domain Model
-- **NormalizedSession**: `workspace.yaml` metadata、timeline events、session issues を束ねる read-only 集約
-- **NormalizedEvent**: current / legacy 共通の timeline event。`kind` と `mapping_status`、helper field を持つ
-- **NormalizedToolCall**: assistant message に付随する tool request summary。`name`, `arguments_preview`, `is_truncated`, `status` を持つ
-
-### Logical Data Model
-
-**Structure Definition**
-- `NormalizedEvent.kind` は `message`, `detail`, `unknown` の排他的分類
-- `NormalizedEvent.mapping_status` は `complete`, `partial` の排他的分類
-- `NormalizedEvent.role` は message 系 event のみで意味を持つ nullable field
-- `NormalizedEvent.tool_calls` は assistant message を主対象とする 0..n の配列で、各要素は `name`, `arguments_preview`, `is_truncated`, `status` を持つ
-- `NormalizedEvent.detail` は non-message 既知 event のみで意味を持つ nullable object
-
-**Consistency & Integrity**
-- `sequence` は source order を保持し、timeline 並び替えの唯一キーとする
-- `raw_payload` は canonical helper field 抽出の成否に関わらず保持する
-- `issues` は session scope と event scope を混在させない
+- `NormalizedSession`: session 単位の aggregate。metadata、corrected timestamps、`source_state`、events、issues、source paths を保持する。
+- `NormalizedEvent`: full event timeline の source of truth。message / detail / unknown の分類と raw traceability を持つ。
+- `NormalizedConversationEntry`: 主会話表示用 projection。`sequence`, `role`, `content`, `occurred_at`, `tool_calls`, `issues` を持つ。
+- `NormalizedActivityEntry`: 補助 activity projection。`sequence`, `category`, `title`, `summary`, `raw_type`, `mapping_status`, `issues`, `raw_available` を持つ。
+- `NormalizedToolCall`: tool request の表示用要約。実行相関や再実行責務は持たない。
 
 ### Data Contracts & Integration
 
-**API Data Transfer**
-- `SessionDetailResponse.data.timeline[*]` は legacy / current 共通 shape を持つ
-- 新規 nullable field:
-  - `tool_calls: []` を既定値にする
-  - `detail: null` を既定値にする
-- 新規非 nullable field:
-  - `mapping_status: "complete"` を既定値にする
-- `tool_calls[*]` は `name`, `arguments_preview`, `is_truncated`, `status` の固定 shape を持つ
-- `raw_payload` は後方互換と将来調査のため保持するが、UI の主表示ロジックは helper field を使う
+**Conversation entry**
+| Field | Type | Rules |
+|-------|------|-------|
+| `sequence` | number | source event の順序 |
+| `role` | `user` or `assistant` | system は含めない |
+| `content` | string | 非空のみ |
+| `tool_calls` | array | assistant entry で本文付きの場合のみ付帯可能 |
+| `degraded` | boolean | event issue がある場合 true |
+
+**Activity entry**
+| Field | Type | Rules |
+|-------|------|-------|
+| `category` | string | `system`, `assistant_turn`, `tool_execution`, `hook`, `skill`, `unknown` |
+| `title` | string | raw type または分類名 |
+| `summary` | string or null | raw payload から生成した短い説明 |
+| `raw_available` | boolean | 明示要求で raw を取得可能 |
+
+**Session source state**
+| Value | Rules | 利用者向け意味 |
+|-------|-------|--------------|
+| `complete` | session が読め、session-level / event-level issue がない | 通常の会話 session として扱える |
+| `workspace_only` | current source で `workspace.yaml` は読めるが `events.jsonl` が存在しない。workspace parse failure や events unreadable がある場合は該当しない | metadata-only session として通常会話 session から区別する |
+| `degraded` | workspace parse failure、events unreadable、JSONL parse failure、partial mapping、unknown shape、legacy read issue のいずれかがある | 読める範囲は表示できるが、信頼できない範囲が issue に残る |
+
+**Source state precedence**
+1. root failure は API error envelope で返し、session `source_state` にはしない。
+2. session issue が 1 件以上ある場合は原則 `degraded`。
+3. 例外として、current source の唯一の issue が `current.events_missing` で、workspace metadata が読めている場合は `workspace_only`。
+4. issue がなく event source が読めている場合は `complete`。
+
+**Raw payload policy**
+- 通常 detail response は `raw_payload` を `nil` とし、生 payload を含めない。
+- `include_raw=true` の response は timeline / activity entry に raw payload を含める。
+- 生 payload を入れない通常 detail でも `sequence`, `source_path`, `raw_type`, `issues` は保持する。
 
 ## Error Handling
 
 ### Error Strategy
-- root unreadable や session not found は既存 error envelope を維持する
-- current event の部分互換は session success のまま `degraded` と `issues` で返す
-- 未知 event type は `unknown` timeline event と warning issue を返し、空配列へ落とさない
+- root が読めない場合は既存 error envelope で失敗する。
+- session 内の workspace parse failure、events missing、events unreadable、JSONL parse failure、partial mapping、unknown shape は session issue として返し、読める範囲の閲覧は継続する。
+- workspace-only current session は空成功ではなく、`source_state=workspace_only` と `current.events_missing` issue で通常会話 session と区別する。
 
 ### Error Categories and Responses
-- **Read errors**: JSONL parse failure、workspace parse failure、unreadable file は session issue として返す
-- **Compatibility warnings**: role/content/timestamp/tool summary の不足は元の `kind` を保ったまま `mapping_status=partial` と warning issue で返す
-- **Unknown shapes**: classifier に乗らない event は raw payload を残して `unknown` として返す
+- User-visible empty state: conversation entry が 0 件のとき、会話本文がない理由を `empty_reason` から表示する。
+- Partial degradation: `mapping_status=partial` と warning issue を event / entry 単位で表示する。
+- Unknown compatibility: unknown event は activity に残し、raw tracking 情報と issue を表示する。
+- Raw 省略: raw payload が通常 detail にないことは failure ではなく、`raw_included=false` と `raw_available=true` で表す。
+
+### Error Code Additions
+- `current.events_missing`: current session directory に `workspace.yaml` はあるが `events.jsonl` が存在しない。severity は warning とし、`source_state=workspace_only` の導出にだけ使う。
+- 既存の `current.events_unreadable` は file が存在するが権限や I/O により読めない場合に使い、`source_state=degraded` とする。
+- `event.partial_mapping` と `event.unknown_shape` は既存 code を維持し、該当 event sequence に紐づけて `source_state=degraded` とする。
 
 ### Monitoring
-- 新規監視基盤は追加しない
-- 運用上の切り分けは session issue と event issue、`raw_type`、`source_path`、`event_sequence` を使う
+新規監視基盤は追加しない。既存 Rails logger と RSpec / Vitest の failure を validation hook とし、root failure と session issue の code が UI まで到達することを確認する。
 
 ## Testing Strategy
 
 ### Unit Tests
-- `EventNormalizer` が `user.message`, `assistant.message`, `system.message` を canonical `message` へ変換することを確認する
-- `EventNormalizer` が message / detail / unknown の kind と、`complete` / `partial` の `mapping_status` を独立に返すことを確認する
-- `EventNormalizer` が assistant message の `toolRequests` から `tool_calls` を抽出し、欠損時は本文を維持したまま `mapping_status=partial` と warning issue を返すことを確認する
-- `EventNormalizer` が `arguments_preview` に redact / truncation ルールを適用することを確認する
-- `EventNormalizer` が `assistant.turn_*`, `tool.execution_*`, `hook.*`, `skill.invoked` を `detail` へ分類し、未対応 type は `unknown` へ落とすことを確認する
-- `CurrentSessionReader` が invalid JSONL line や unreadable workspace を含んでも既読 event を保持することを確認する
-- `SessionDetailPresenter` が legacy / current の両方で同じ primary timeline field と `tool_calls[*]` shape を返すことを確認する
+- `EventNormalizer` が `user.message` / 本文付き `assistant.message` / `system.message` / 空 assistant tool request / detail / unknown を分類することを確認する。
+- `ConversationProjector` が user / assistant の非空本文だけを sequence 順に抽出し、system/detail/unknown を除外することを確認する。
+- `ActivityProjector` が `assistant.turn_*`, `tool.execution_*`, `hook.*`, `skill.invoked`, unknown を activity として保持することを確認する。
+- `CurrentSessionReader` が event timestamp、file mtime、workspace metadata の順で `updated_at` を補正することを確認する。
+- `CurrentSessionReader` が `current.events_missing` だけを持つ current source を `workspace_only`、その他 issue を持つ session を `degraded`、issue なしを `complete` とすることを確認する。
+- `NormalizedToolCall` と preview helper が欠損、redaction、truncation を会話本文から独立して扱うことを確認する。
 
 ### Integration Tests
-- current fixture を使った session detail API が message、tool_calls、detail、`mapping_status`、issues を同じ timeline で返すことを request / presenter spec で確認する
-- legacy fixture が current 対応後も `message` timeline と issue grouping を維持することを回帰確認する
-- current session の unknown event が空 success ではなく degraded timeline item として返ることを確認する
+- current schema fixture から detail response が `conversation`, `activity`, `timeline`, `issues`, `raw_included=false` を返すことを確認する。
+- controller が `include_raw=true` を presenter に渡し、未指定または `true` 以外の値では `include_raw=false` として扱うことを確認する。
+- `include_raw=true` で raw payload が復元され、通常 detail では raw payload が返らないことを確認する。
+- mixed current / legacy fixture で session list の sort と `conversation_summary` が一貫することを確認する。
+- workspace-only current session が `source_state=workspace_only`、`current.events_missing` issue、会話なし summary を返すことを確認する。
+- invalid JSONL と unknown event を含む session が degraded でも読める conversation を返すことを確認する。
 
 ### E2E/UI Tests
-- `SessionDetailPage` が current session の会話本文、code block、tool hint を source format 分岐なしで表示することを確認する
-- `SessionDetailPage` が detail event を message と異なる badge / summary で表示し、`mapping_status=partial` を別 badge で示しつつ会話本文の順序を維持することを確認する
-- degraded current session で session issue と event issue の両方が見え、閲覧自体は継続できることを確認する
+- 詳細画面を開くと、最初に user / assistant の会話 transcript が表示され、activity は主会話に混在しないことを確認する。
+- 会話なし session で空状態が表示され、raw payload や activity の量で主表示が埋まらないことを確認する。
+- assistant 本文の tool request が本文とは別の付帯情報として表示されることを確認する。
+- 一覧カードで会話有無、会話数、preview、補正済み更新時刻、degraded 状態を確認できることを確認する。
+- raw 明示 action 後だけ raw payload を含む detail が取得され、初期表示では raw payload が表示されないことを確認する。
+- legacy session の既存詳細表示が current schema 互換追加後も後退しないことを確認する。
 
-### Performance/Load
-- JSONL 読み取りは single pass を維持し、全 event を再走査して相関しない
-- detail summary は event 単位の局所計算に限定し、O n の line processing を崩さない
+### Performance
+- `events.jsonl` は既存通り line 単位で読み、projection は session 内 event 数に対する線形処理に留める。
+- raw payload は通常 response から省略し、detail 初期表示の payload size を event log の巨大さに比例させない。
 
 ## Security Considerations
-- tool request の `arguments_preview` は表示専用であり、shell 展開や再実行を行わない
-- `arguments_preview` 生成時は secret-like key を redact し、240 文字上限で切り詰める
-- current raw payload に含まれる補助情報は read-only で扱い、UI は React の既存 escaping に依存して文字列表示する
-- 非会話 event の要約生成はローカル raw file からの抽出に限定し、外部送信や追加権限を導入しない
+- raw files はローカル一次ソースとして扱い、外部送信や共有は行わない。
+- tool arguments preview は secret-like key を redact し、通常 UI では raw payload を表示しない。
+- `include_raw=true` は read-only の明示要求であり、実行・再送信・共有の機能を持たない。
+
+## Supporting References
+- `.kiro/specs/current-copilot-cli-schema-compatibility/research.md` - discovery log と design decisions
+- GitHub Docs: Copilot CLI configuration directory - `session-state/` は session ID ごとの event log と workspace artifacts を保存する
+- GitHub Docs: Copilot SDK streaming events - `assistant.message` は `content` と `toolRequests` を持ち、turn / tool execution event と別 event として扱われる
