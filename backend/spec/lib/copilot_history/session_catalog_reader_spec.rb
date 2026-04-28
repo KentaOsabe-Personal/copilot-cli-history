@@ -63,7 +63,8 @@ RSpec.describe CopilotHistory::SessionCatalogReader, :copilot_history do
           }
         )
         expect(legacy_session.events.map(&:sequence)).to eq([ 1, 2 ])
-        expect(legacy_session.events.last.kind).to eq(:partial)
+        expect(legacy_session.events.last.kind).to eq(:message)
+        expect(legacy_session.events.last.mapping_status).to eq(:partial)
         expect(legacy_session.events.last.raw_payload).to eq(
           {
             "type" => "assistant_message",

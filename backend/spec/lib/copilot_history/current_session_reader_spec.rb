@@ -205,6 +205,93 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
       end
     end
 
+    it "normalizes current dotted schema fixtures into message, detail, and unknown events with helper fields" do
+      with_copilot_history_fixture("current_schema_valid") do |root|
+        session = described_class.new.call(build_source(root, "current-schema-valid"))
+
+        expect(session.events.map { |event| [ event.sequence, event.kind, event.mapping_status, event.raw_type ] }).to eq(
+          [
+            [ 1, :message, :complete, "system.message" ],
+            [ 2, :message, :complete, "user.message" ],
+            [ 3, :detail, :complete, "assistant.turn_start" ],
+            [ 4, :message, :complete, "assistant.message" ],
+            [ 5, :detail, :complete, "tool.execution_start" ],
+            [ 6, :detail, :complete, "tool.execution_complete" ],
+            [ 7, :detail, :complete, "assistant.turn_end" ]
+          ]
+        )
+        expect(session.events.fetch(3).tool_calls).to eq(
+          [
+            CopilotHistory::Types::NormalizedToolCall.new(
+              name: "functions.bash",
+              arguments_preview: "{\"command\":\"git --no-pager status\",\"description\":\"Inspect repository status\"}",
+              is_truncated: false,
+              status: :complete
+            )
+          ]
+        )
+        expect(session.events.fetch(2).detail).to eq(
+          category: "assistant_turn",
+          title: "assistant.turn_start",
+          body: "turn-1"
+        )
+        expect(session.issues).to eq([])
+      end
+    end
+
+    it "keeps readable current dotted events while surfacing partial tool summaries, unknown events, and invalid jsonl lines" do
+      with_copilot_history_fixture("current_schema_degraded") do |root|
+        session = described_class.new.call(build_source(root, "current-schema-degraded"))
+
+        expect(session.events.map { |event| [ event.sequence, event.kind, event.mapping_status, event.raw_type ] }).to eq(
+          [
+            [ 1, :message, :complete, "user.message" ],
+            [ 2, :message, :partial, "assistant.message" ],
+            [ 3, :detail, :complete, "hook.start" ],
+            [ 4, :unknown, :complete, "mystery.event" ]
+          ]
+        )
+        expect(session.events.fetch(1).tool_calls).to eq(
+          [
+            CopilotHistory::Types::NormalizedToolCall.new(
+              name: nil,
+              arguments_preview: "{\"command\":\"printenv\",\"token\":\"[REDACTED]\"}",
+              is_truncated: false,
+              status: :partial
+            )
+          ]
+        )
+        expect(session.events.fetch(2).detail).to eq(
+          category: "hook",
+          title: "hook.start",
+          body: "before-tool / *"
+        )
+        expect(session.issues).to include(
+          CopilotHistory::Types::ReadIssue.new(
+            code: CopilotHistory::Errors::ReadErrorCode::EVENT_PARTIAL_MAPPING,
+            message: "event payload matched partially",
+            source_path: root.join("session-state/current-schema-degraded/events.jsonl"),
+            sequence: 2,
+            severity: :warning
+          ),
+          CopilotHistory::Types::ReadIssue.new(
+            code: CopilotHistory::Errors::ReadErrorCode::EVENT_UNKNOWN_SHAPE,
+            message: "event payload could not be mapped to canonical fields",
+            source_path: root.join("session-state/current-schema-degraded/events.jsonl"),
+            sequence: 4,
+            severity: :warning
+          ),
+          CopilotHistory::Types::ReadIssue.new(
+            code: CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENT_PARSE_FAILED,
+            message: "events.jsonl line could not be parsed",
+            source_path: root.join("session-state/current-schema-degraded/events.jsonl"),
+            sequence: 5,
+            severity: :error
+          )
+        )
+      end
+    end
+
     def build_source(root, session_id)
       source_path = root.join("session-state", session_id)
 

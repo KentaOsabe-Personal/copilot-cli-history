@@ -16,6 +16,41 @@ RSpec.describe "Copilot history fixture support", :copilot_history do
     end
   end
 
+  it "provides representative current schema fixture files for canonical message and detail scenarios" do
+    with_copilot_history_fixture("current_schema_valid") do |root|
+      workspace = root.join("session-state/current-schema-valid/workspace.yaml")
+      events = root.join("session-state/current-schema-valid/events.jsonl")
+      lines = events.each_line.map(&:strip)
+
+      expect(workspace.read).to include("session_id: current-schema-valid")
+      expect(lines).to include(
+        a_string_including("\"type\":\"system.message\""),
+        a_string_including("\"type\":\"user.message\""),
+        a_string_including("\"type\":\"assistant.message\""),
+        a_string_including("\"type\":\"assistant.turn_start\""),
+        a_string_including("\"type\":\"tool.execution_start\""),
+        a_string_including("\"toolRequests\":[")
+      )
+    end
+  end
+
+  it "provides degraded current schema fixture files for partial tool data, unknown events, and invalid jsonl" do
+    with_copilot_history_fixture("current_schema_degraded") do |root|
+      workspace = root.join("session-state/current-schema-degraded/workspace.yaml")
+      events = root.join("session-state/current-schema-degraded/events.jsonl")
+      lines = events.each_line.map(&:rstrip)
+
+      expect(workspace.read).to include("session_id: current-schema-degraded")
+      expect(lines).to include(
+        a_string_including("\"type\":\"assistant.message\""),
+        a_string_including("\"toolRequests\":[{\"arguments\":"),
+        a_string_including("\"type\":\"hook.start\""),
+        a_string_including("\"type\":\"mystery.event\"")
+      )
+      expect { JSON.parse(lines.last) }.to raise_error(JSON::ParserError)
+    end
+  end
+
   it "can apply and restore permission restrictions on copied fixture artifacts" do
     with_copilot_history_fixture("current_unreadable") do |root|
       target = root.join("session-state/current-unreadable/events.jsonl")

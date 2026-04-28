@@ -2,25 +2,47 @@ require "rails_helper"
 
 RSpec.describe "CopilotHistory normalized contracts" do
   describe CopilotHistory::Types::NormalizedEvent do
-    it "retains canonical event fields and raw payload for unknown or partial events" do
+    it "retains canonical event fields, helper defaults, and raw payload" do
       event = described_class.new(
         sequence: 7,
         kind: :unknown,
+        mapping_status: :complete,
         raw_type: "mystery-event",
         occurred_at: "2026-04-26T10:00:00Z",
         role: nil,
         content: nil,
+        tool_calls: [],
+        detail: nil,
         raw_payload: { "type" => "mystery-event", "payload" => { "value" => 1 } }
       )
 
       expect(event.sequence).to eq(7)
       expect(event.kind).to eq(:unknown)
+      expect(event.mapping_status).to eq(:complete)
       expect(event.raw_type).to eq("mystery-event")
       expect(event.occurred_at).to eq(Time.iso8601("2026-04-26T10:00:00Z"))
+      expect(event.tool_calls).to eq([])
+      expect(event.detail).to be_nil
       expect(event.raw_payload).to eq(
         "type" => "mystery-event",
         "payload" => { "value" => 1 }
       )
+    end
+  end
+
+  describe CopilotHistory::Types::NormalizedToolCall do
+    it "normalizes one tool request summary into the fixed backend helper shape" do
+      tool_call = described_class.new(
+        name: "functions.bash",
+        arguments_preview: "{\"command\":\"git status\"}",
+        is_truncated: false,
+        status: :complete
+      )
+
+      expect(tool_call.name).to eq("functions.bash")
+      expect(tool_call.arguments_preview).to eq("{\"command\":\"git status\"}")
+      expect(tool_call.is_truncated).to be(false)
+      expect(tool_call.status).to eq(:complete)
     end
   end
 
@@ -45,11 +67,14 @@ RSpec.describe "CopilotHistory normalized contracts" do
     it "wraps one normalized event with any read issues emitted during mapping" do
       event = CopilotHistory::Types::NormalizedEvent.new(
         sequence: 2,
-        kind: :partial,
+        kind: :message,
+        mapping_status: :partial,
         raw_type: "assistant_turn",
         occurred_at: nil,
         role: "assistant",
         content: nil,
+        tool_calls: [],
+        detail: nil,
         raw_payload: { "type" => "assistant_turn" }
       )
       issue = CopilotHistory::Types::ReadIssue.new(
@@ -72,10 +97,13 @@ RSpec.describe "CopilotHistory normalized contracts" do
       event = CopilotHistory::Types::NormalizedEvent.new(
         sequence: 1,
         kind: :message,
+        mapping_status: :complete,
         raw_type: "user_message",
         occurred_at: "2026-04-26T10:00:00Z",
         role: "user",
         content: "open the latest session",
+        tool_calls: [],
+        detail: nil,
         raw_payload: { "type" => "user_message" }
       )
       snapshot = CopilotHistory::Types::MessageSnapshot.new(

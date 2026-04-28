@@ -208,10 +208,13 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
               {
                 sequence: 1,
                 kind: "message",
+                mapping_status: "complete",
                 raw_type: "assistant_message",
                 occurred_at: "2026-04-26T07:50:01Z",
                 role: "assistant",
                 content: "legacy mixed event",
+                tool_calls: [],
+                detail: nil,
                 raw_payload: {
                   type: "assistant_message",
                   role: "assistant",
@@ -223,11 +226,14 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
               },
               {
                 sequence: 2,
-                kind: "partial",
+                kind: "message",
+                mapping_status: "partial",
                 raw_type: "assistant_message",
                 occurred_at: nil,
                 role: "assistant",
                 content: "legacy partial event",
+                tool_calls: [],
+                detail: nil,
                 raw_payload: {
                   type: "assistant_message",
                   role: "assistant",
@@ -279,6 +285,58 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
             }
           }
         )
+      end
+    end
+
+    it "returns current dotted sessions with canonical helper fields in the shared detail response" do
+      with_copilot_history_fixture("current_schema_valid") do |root|
+        ENV["COPILOT_HOME"] = root.to_s
+
+        get "/api/sessions/current-schema-valid"
+
+        expect(response).to have_http_status(:ok)
+
+        payload = JSON.parse(response.body, symbolize_names: true).fetch(:data)
+        timeline = payload.fetch(:timeline)
+        assistant_message = timeline.find { |event| event.fetch(:raw_type) == "assistant.message" }
+        detail_event = timeline.find { |event| event.fetch(:raw_type) == "tool.execution_start" }
+        expect(payload.fetch(:source_format)).to eq("current")
+        expect(payload.fetch(:message_snapshots)).to eq([])
+        expect(timeline.map { |event| [ event.fetch(:sequence), event.fetch(:kind), event.fetch(:mapping_status) ] }).to eq(
+          [
+            [ 1, "message", "complete" ],
+            [ 2, "message", "complete" ],
+            [ 3, "detail", "complete" ],
+            [ 4, "message", "complete" ],
+            [ 5, "detail", "complete" ],
+            [ 6, "detail", "complete" ],
+            [ 7, "detail", "complete" ]
+          ]
+        )
+        expect(assistant_message).to include(
+          role: "assistant",
+          content: "I can inspect the latest sessions.",
+          tool_calls: [
+            {
+              name: "functions.bash",
+              arguments_preview: "{\"command\":\"git --no-pager status\",\"description\":\"Inspect repository status\"}",
+              is_truncated: false,
+              status: "complete"
+            }
+          ],
+          detail: nil
+        )
+        expect(detail_event).to include(
+          role: nil,
+          content: nil,
+          tool_calls: [],
+          detail: {
+            category: "tool_execution",
+            title: "tool.execution_start",
+            body: "functions.bash / tool-1"
+          }
+        )
+        expect(payload.fetch(:issues)).to eq([])
       end
     end
 

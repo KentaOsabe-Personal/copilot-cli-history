@@ -1,0 +1,87 @@
+# 実装タスク
+
+- [x] 1. Foundation: current schema 互換の検証土台と backend canonical contract を整える
+- [x] 1.1 current schema の代表 fixture と degradation シナリオを整備する
+  - current session の正常系、tool request 欠損、unknown event、invalid JSONL line を再現できるサンプルを用意する。
+  - backend と frontend の検証が同じ current / legacy シナリオ前提で進められるよう、会話・detail・unknown の混在パターンを固定する。
+  - 代表 fixture を使って current 互換の正常系と部分劣化系を再現できる状態になる。
+  - _Requirements: 1.1, 2.2, 3.3, 5.1, 5.4_
+- [x] 1.2 backend canonical event・tool summary・issue code の基盤を拡張する
+  - normalized event / tool call / issue code が `kind`、`mapping_status`、`tool_calls`、`detail`、`raw_payload` の責務を backend 内で表現できるようにする。
+  - helper field の未提供と読取 failure を別 code と default 値で扱い、raw payload 保持と partial degradation 前提を崩さない。
+  - CurrentSessionReader、EventNormalizer、SessionDetailPresenter が同じ backend canonical contract を前提に進められる状態になる。
+  - _Requirements: 1.3, 2.3, 3.1, 4.3, 5.2_
+
+- [ ] 2. Core: backend で current event を canonical timeline に正規化する
+- [ ] 2.1 EventNormalizer で current / legacy の会話 event と non-message event を共通 taxonomy へ分類する
+  - current の `user.message` / `assistant.message` / `system.message` から role・content・timestamp を抽出し、legacy と同じ message contract へ揃える。
+  - `assistant.turn_*`、`tool.execution_*`、`hook.*`、`skill.invoked` には detail summary を与え、それ以外は unknown と issue を返す。
+  - current / legacy の両 format で message / detail / unknown と partial issue を同じ shape で返せる state になる。
+  - _Requirements: 1.1, 1.3, 3.1, 3.3, 5.1, 5.2_
+- [ ] 2.2 EventNormalizer で tool request summary の抽出・redact・truncation を実装する
+  - assistant message の `toolRequests` から `name`、`arguments_preview`、`status`、`is_truncated` を生成する。
+  - `arguments_preview` は 240 文字上限とし、`token`、`secret`、`password`、`authorization`、`cookie` を含む key は `[REDACTED]` へ置換する。
+  - tool 情報が欠けていても本文を維持し、`status=partial` と warning issue 付きの tool summary を返せる状態になる。
+  - _Requirements: 2.2, 2.3, 2.4_
+- [ ] 2.3 CurrentSessionReader で line 単位の部分成功と sequence 保持を実装する
+  - `workspace.yaml` の失敗と `events.jsonl` の行単位失敗を分けて蓄積し、1 行の失敗で session 全体を空成功や全体 failure にしない。
+  - JSONL を single pass で読み、読めた event は source 順の `sequence` を維持したまま返す。
+  - current fixture に unreadable / invalid line が混在しても、読めた event と issue を含む normalized session が reader 単体で返る状態になる。
+  - _Requirements: 1.2, 3.4, 5.1, 5.4_
+- [ ] 2.4 (P) SessionDetailPresenter で current / legacy 共通の session detail DTO を整形する
+  - timeline item に `kind`、`mapping_status`、`tool_calls`、`detail` を追加し、`tool_calls=[]`、`detail=null`、`mapping_status=complete` の default を current / legacy 共通で揃える。
+  - session issue と event issue の境界を維持し、helper field 未提供と読取 failure を別の signal で観測できるようにする。
+  - frontend が raw payload 深掘りなしで本文、tool hint、detail summary、degraded 範囲を描画できる DTO が返る状態になる。
+  - _Requirements: 1.2, 2.1, 3.2, 4.1, 4.3, 5.3_
+  - _Boundary: SessionDetailPresenter_
+  - _Depends: 1.2_
+- [ ] 2.5 SessionDetailQuery で current / legacy の詳細読取を共通 orchestration に通す
+  - current source でも legacy source でも同じ detail lookup flow から normalized session を選び、source format 専用分岐を増やさない。
+  - root failure と not found の既存境界を保ったまま、current の partial session を success 経路で返せるようにする。
+  - caller が current / legacy の両 session を同じ query 契約で受け取り、partial success を別扱いせずに後段へ渡せる状態になる。
+  - _Requirements: 1.4, 4.1, 4.4, 5.4_
+  - _Boundary: SessionDetailQuery_
+  - _Depends: 2.3_
+
+- [ ] 3. Core: frontend を canonical helper field ベースの描画へ切り替える
+- [ ] 3.1 session detail 型と timeline formatter を canonical helper field ベースに更新する
+  - `content` の code fence 分解を維持しつつ、`tool_calls` と `detail` を通常本文と別 block として扱う。
+  - raw payload の path や source format 判定を持ち込まず、nullable default と fixed shape だけで block model を組み立てる。
+  - current と legacy の両 DTO から本文、tool hint、detail summary を同じ formatter で順序どおり生成できる状態になる。
+  - _Requirements: 2.1, 2.2, 2.4, 3.2, 4.2_
+- [ ] 3.2 TimelineEntry / TimelineContent UI で kind と mapping_status の差を視覚的に分離する
+  - `message`、`detail`、`unknown` の badge と summary を出し分け、role badge は message のみに限定する。
+  - `mapping_status=partial` を secondary 表示に留め、event issue と session issue の説明を会話本文と混同させない。
+  - degraded current session と clean legacy session の両方で、会話本文の順序を保ったまま event ごとの差が読める状態になる。
+  - _Requirements: 1.3, 3.1, 4.2, 5.1, 5.3_
+  - _Depends: 3.1_
+
+- [ ] 4. Integration: API と UI の session detail flow を共通契約へ接続する
+- [ ] 4.1 session detail API flow で current canonical helper field を response まで通す
+  - SessionDetailQuery が選んだ current / legacy session を同じ presenter / endpoint flow で返し、source format 専用分岐を増やさない。
+  - current の partial session を success として返しつつ、not found と root failure の既存境界は維持する。
+  - detail endpoint から current / legacy の両 session が同じ主要 field と degraded signal を持って返る状態になる。
+  - _Requirements: 1.4, 4.1, 4.3, 4.4, 5.4_
+  - _Depends: 2.4, 2.5_
+- [ ] 4.2 session detail page で canonical timeline blocks と degraded 表示を end-to-end で採用する
+  - canonical DTO を page / entry / content rendering に接続し、source format 切替や専用導線を増やさない。
+  - current 対応後も legacy session の主要 timeline 読取体験を維持し、未提供項目と読取 failure の区別が UI へ伝わるようにする。
+  - current / legacy が同時に存在しても同じ詳細画面フローで tool hint・detail summary・partial 表示まで読める状態になる。
+  - _Requirements: 2.4, 4.1, 4.2, 4.4, 5.3, 5.4_
+  - _Depends: 3.1, 3.2, 4.1_
+
+- [ ] 5. Validation: degraded と互換回帰を current / legacy 両面で固定する
+- [ ] 5.1 (P) backend specs で current session detail の部分互換と unknown event の境界を固定する
+  - current fixture を使い、message、tool_calls、detail、mapping_status、issues が同じ timeline で返ることを検証する。
+  - unknown event や invalid JSONL line が空 success へ落ちず、degraded session / event として観測できることを確認する。
+  - current 対応後も legacy session detail の主要 field と issue grouping が後退しないことを検知できる状態になる。
+  - _Requirements: 1.4, 3.3, 3.4, 4.4, 5.2, 5.4_
+  - _Boundary: Backend session detail validation_
+  - _Depends: 4.1_
+- [ ] 5.2 (P) frontend tests で本文・tool hint・detail・partial 表示の回帰を固定する
+  - current session の会話本文、code block、tool hint、detail summary が source format 分岐なしで描画されることを確認する。
+  - `mapping_status=partial` の badge と issue 説明が会話本文を壊さず表示され、閲覧自体は継続できることを確認する。
+  - current / legacy の両 session で同じ詳細画面から読める範囲と不確実な範囲を判断できる状態がテストで固定される。
+  - _Requirements: 2.1, 2.2, 3.2, 5.1, 5.3, 5.4_
+  - _Boundary: Frontend session detail validation_
+  - _Depends: 4.2_

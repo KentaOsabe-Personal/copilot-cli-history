@@ -36,10 +36,13 @@ module CopilotHistory
           {
             sequence: event.sequence,
             kind: event.kind.to_s,
+            mapping_status: event.mapping_status.to_s,
             raw_type: event.raw_type,
             occurred_at: iso8601_or_nil(event.occurred_at),
             role: event.role,
             content: event.content,
+            tool_calls: event.tool_calls.map { |tool_call| present_tool_call(tool_call) },
+            detail: event.detail,
             raw_payload: event.raw_payload,
             degraded: issues.any?,
             issues: issues
@@ -60,6 +63,15 @@ module CopilotHistory
             git_root: path_or_nil(session.git_root),
             repository: session.repository,
             branch: session.branch
+          }
+        end
+
+        def present_tool_call(tool_call)
+          {
+            name: tool_call.name,
+            arguments_preview: tool_call.arguments_preview,
+            is_truncated: tool_call.is_truncated,
+            status: tool_call.status.to_s
           }
         end
 
