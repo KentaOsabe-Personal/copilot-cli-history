@@ -12,30 +12,30 @@
   - CurrentSessionReader、EventNormalizer、SessionDetailPresenter が同じ backend canonical contract を前提に進められる状態になる。
   - _Requirements: 1.3, 2.3, 3.1, 4.3, 5.2_
 
-- [ ] 2. Core: backend で current event を canonical timeline に正規化する
-- [ ] 2.1 EventNormalizer で current / legacy の会話 event と non-message event を共通 taxonomy へ分類する
+- [x] 2. Core: backend で current event を canonical timeline に正規化する
+- [x] 2.1 EventNormalizer で current / legacy の会話 event と non-message event を共通 taxonomy へ分類する
   - current の `user.message` / `assistant.message` / `system.message` から role・content・timestamp を抽出し、legacy と同じ message contract へ揃える。
   - `assistant.turn_*`、`tool.execution_*`、`hook.*`、`skill.invoked` には detail summary を与え、それ以外は unknown と issue を返す。
   - current / legacy の両 format で message / detail / unknown と partial issue を同じ shape で返せる state になる。
   - _Requirements: 1.1, 1.3, 3.1, 3.3, 5.1, 5.2_
-- [ ] 2.2 EventNormalizer で tool request summary の抽出・redact・truncation を実装する
+- [x] 2.2 EventNormalizer で tool request summary の抽出・redact・truncation を実装する
   - assistant message の `toolRequests` から `name`、`arguments_preview`、`status`、`is_truncated` を生成する。
   - `arguments_preview` は 240 文字上限とし、`token`、`secret`、`password`、`authorization`、`cookie` を含む key は `[REDACTED]` へ置換する。
   - tool 情報が欠けていても本文を維持し、`status=partial` と warning issue 付きの tool summary を返せる状態になる。
   - _Requirements: 2.2, 2.3, 2.4_
-- [ ] 2.3 CurrentSessionReader で line 単位の部分成功と sequence 保持を実装する
+- [x] 2.3 CurrentSessionReader で line 単位の部分成功と sequence 保持を実装する
   - `workspace.yaml` の失敗と `events.jsonl` の行単位失敗を分けて蓄積し、1 行の失敗で session 全体を空成功や全体 failure にしない。
   - JSONL を single pass で読み、読めた event は source 順の `sequence` を維持したまま返す。
   - current fixture に unreadable / invalid line が混在しても、読めた event と issue を含む normalized session が reader 単体で返る状態になる。
   - _Requirements: 1.2, 3.4, 5.1, 5.4_
-- [ ] 2.4 (P) SessionDetailPresenter で current / legacy 共通の session detail DTO を整形する
+- [x] 2.4 (P) SessionDetailPresenter で current / legacy 共通の session detail DTO を整形する
   - timeline item に `kind`、`mapping_status`、`tool_calls`、`detail` を追加し、`tool_calls=[]`、`detail=null`、`mapping_status=complete` の default を current / legacy 共通で揃える。
   - session issue と event issue の境界を維持し、helper field 未提供と読取 failure を別の signal で観測できるようにする。
   - frontend が raw payload 深掘りなしで本文、tool hint、detail summary、degraded 範囲を描画できる DTO が返る状態になる。
   - _Requirements: 1.2, 2.1, 3.2, 4.1, 4.3, 5.3_
   - _Boundary: SessionDetailPresenter_
   - _Depends: 1.2_
-- [ ] 2.5 SessionDetailQuery で current / legacy の詳細読取を共通 orchestration に通す
+- [x] 2.5 SessionDetailQuery で current / legacy の詳細読取を共通 orchestration に通す
   - current source でも legacy source でも同じ detail lookup flow から normalized session を選び、source format 専用分岐を増やさない。
   - root failure と not found の既存境界を保ったまま、current の partial session を success 経路で返せるようにする。
   - caller が current / legacy の両 session を同じ query 契約で受け取り、partial success を別扱いせずに後段へ渡せる状態になる。

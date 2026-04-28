@@ -62,9 +62,41 @@ RSpec.describe CopilotHistory::Api::SessionDetailQuery do
 
       expect(query.call(session_id: "session-123")).to eq(failure_result)
     end
+
+    it "returns degraded current sessions through the shared found result without special casing partial success" do
+      degraded_current_session = build_session(
+        session_id: "current-schema-degraded",
+        source_format: :current,
+        issues: [
+          CopilotHistory::Types::ReadIssue.new(
+            code: CopilotHistory::Errors::ReadErrorCode::EVENT_PARTIAL_MAPPING,
+            message: "event payload matched partially",
+            source_path: "/tmp/copilot/session-state/current-schema-degraded/events.jsonl",
+            sequence: 2,
+            severity: :warning
+          )
+        ]
+      )
+      success_result = CopilotHistory::Types::ReadResult::Success.new(
+        root: root,
+        sessions: [
+          build_session(session_id: "legacy-session", source_format: :legacy),
+          degraded_current_session
+        ]
+      )
+
+      expect(session_catalog_reader).to receive(:call).once.and_return(success_result)
+
+      expect(query.call(session_id: "current-schema-degraded")).to eq(
+        CopilotHistory::Api::Types::SessionLookupResult::Found.new(
+          root: root,
+          session: degraded_current_session
+        )
+      )
+    end
   end
 
-  def build_session(session_id:, source_format:)
+  def build_session(session_id:, source_format:, issues: [])
     CopilotHistory::Types::NormalizedSession.new(
       session_id: session_id,
       source_format: source_format,
@@ -73,7 +105,7 @@ RSpec.describe CopilotHistory::Api::SessionDetailQuery do
       selected_model: nil,
       events: [],
       message_snapshots: [],
-      issues: [],
+      issues: issues,
       source_paths: {
         source: "/tmp/copilot/#{session_id}.json"
       }

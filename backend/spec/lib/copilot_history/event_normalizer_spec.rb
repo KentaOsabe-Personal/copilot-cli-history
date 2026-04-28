@@ -300,6 +300,92 @@ RSpec.describe CopilotHistory::EventNormalizer do
       )
     end
 
+    it "applies redaction and truncation to current tool request summaries without dropping the message body" do
+      result = normalizer.call(
+        raw_event: {
+          "type" => "assistant.message",
+          "data" => {
+            "content" => "I can summarize the request.",
+            "toolRequests" => [
+              {
+                "name" => "functions.bash",
+                "arguments" => {
+                  "command" => "printenv",
+                  "token" => "super-secret-token",
+                  "description" => "x" * 400
+                }
+              }
+            ]
+          },
+          "timestamp" => "2026-04-28T03:00:04Z"
+        },
+        source_format: :current,
+        sequence: 6
+      )
+
+      expect(result.event).to have_attributes(
+        kind: :message,
+        mapping_status: :complete,
+        role: "assistant",
+        content: "I can summarize the request."
+      )
+      expect(result.event.tool_calls).to eq(
+        [
+          CopilotHistory::Types::NormalizedToolCall.new(
+            name: "functions.bash",
+            arguments_preview: result.event.tool_calls.first.arguments_preview,
+            is_truncated: true,
+            status: :complete
+          )
+        ]
+      )
+      expect(result.event.tool_calls.first.arguments_preview).to include("\"token\":\"[REDACTED]\"")
+      expect(result.event.tool_calls.first.arguments_preview.length).to eq(240)
+      expect(result.issues).to eq([])
+    end
+
+    it "classifies skill.invoked current events as detail events with a canonical summary" do
+      result = normalizer.call(
+        raw_event: {
+          "type" => "skill.invoked",
+          "data" => {
+            "skillName" => "kiro-review",
+            "toolName" => "functions.skill"
+          },
+          "timestamp" => "2026-04-28T04:00:04Z"
+        },
+        source_format: :current,
+        sequence: 7
+      )
+
+      expect(result.event).to eq(
+        CopilotHistory::Types::NormalizedEvent.new(
+          sequence: 7,
+          kind: :detail,
+          mapping_status: :complete,
+          raw_type: "skill.invoked",
+          occurred_at: "2026-04-28T04:00:04Z",
+          role: nil,
+          content: nil,
+          tool_calls: [],
+          detail: {
+            category: "skill",
+            title: "skill.invoked",
+            body: "kiro-review / functions.skill"
+          },
+          raw_payload: {
+            "type" => "skill.invoked",
+            "data" => {
+              "skillName" => "kiro-review",
+              "toolName" => "functions.skill"
+            },
+            "timestamp" => "2026-04-28T04:00:04Z"
+          }
+        )
+      )
+      expect(result.issues).to eq([])
+    end
+
     include_examples "a known normalized message", :current
     include_examples "a known normalized message", :legacy
     include_examples "a partially normalized message", :current
