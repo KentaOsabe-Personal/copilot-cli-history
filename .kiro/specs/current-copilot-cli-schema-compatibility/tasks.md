@@ -40,8 +40,8 @@
   - 完了時には tool request の欠損や truncation が会話本文の表示を阻害せず、partial issue と summary で確認できる。
   - _Requirements: 4.1, 4.2, 4.3_
 
-- [ ] 3. Core: conversation / activity projection を作る
-- [ ] 3.1 (P) user / assistant の主会話 transcript を派生する
+- [x] 3. Core: conversation / activity projection を作る
+- [x] 3.1 (P) user / assistant の主会話 transcript を派生する
   - 非空本文を持つ user / assistant message だけを source sequence 順に conversation entry へ写す。
   - system、detail、unknown、空 assistant tool request を主会話から除外する。
   - conversation が空の場合に利用者向け empty reason を返せるようにする。
@@ -50,7 +50,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.2, 3.2, 3.5, 4.1_
   - _Boundary: ConversationProjector_
 
-- [ ] 3.2 (P) internal activity と unknown traceability を派生する
+- [x] 3.2 (P) internal activity と unknown traceability を派生する
   - system message、assistant turn、tool execution、hook、skill、unknown event を conversation と別の activity entry にする。
   - raw payload を通常 detail に入れなくても、sequence、raw type、source path、issue、raw availability で追跡できるようにする。
   - 完了時には activity が主会話本文と混在せず、unknown / partial event の調査に必要な参照情報を保持する。
@@ -58,7 +58,7 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 4.4, 4.5, 7.3, 7.4, 8.3_
   - _Boundary: ActivityProjector_
 
-- [ ] 3.3 session list 用 conversation summary を派生する
+- [x] 3.3 session list 用 conversation summary を派生する
   - session ごとの会話有無、会話数、preview、activity count を conversation / activity projection から作る。
   - preview は user / assistant の本文だけから生成し、internal activity を preview 本文に使わない。
   - 完了時には current / legacy / workspace-only / degraded session の一覧識別情報が同じ summary contract で返る。
