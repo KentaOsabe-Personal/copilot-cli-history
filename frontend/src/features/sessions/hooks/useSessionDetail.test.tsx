@@ -27,6 +27,11 @@ function createClient(fetchSessionDetail: SessionApiClient['fetchSessionDetail']
       throw new Error('fetchSessionIndex should not be called in useSessionDetail tests')
     }),
     fetchSessionDetail,
+    fetchSessionDetailWithRaw: vi.fn<
+      SessionApiClient['fetchSessionDetailWithRaw']
+    >(async (): Promise<SessionApiResult<SessionDetailResponse>> => {
+      throw new Error('fetchSessionDetailWithRaw should not be called in useSessionDetail tests')
+    }),
   }
 }
 
@@ -44,9 +49,25 @@ function buildDetail(sessionId: string): SessionDetailResponse {
         branch: 'main',
       },
       selected_model: 'gpt-5.4',
+      source_state: 'complete',
       degraded: false,
+      raw_included: false,
       issues: [],
       message_snapshots: [],
+      conversation: {
+        entries: [],
+        message_count: 0,
+        empty_reason: 'no_events',
+        summary: {
+          has_conversation: false,
+          message_count: 0,
+          preview: null,
+          activity_count: 0,
+        },
+      },
+      activity: {
+        entries: [],
+      },
       timeline: [],
     },
   }

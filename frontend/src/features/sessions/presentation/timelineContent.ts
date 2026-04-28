@@ -1,22 +1,21 @@
-import type { SessionTimelineEvent } from '../api/sessionApi.types.ts'
+import type {
+  SessionActivityEntry,
+  SessionConversationEntry,
+  SessionTimelineEvent,
+} from '../api/sessionApi.types.ts'
+import {
+  extractContentBlocks,
+  extractToolHintBlocks,
+  type ConversationVisualBlock,
+} from './conversationContent.ts'
 
 export type TimelineVisualBlock =
-  | { kind: 'text'; text: string }
-  | { kind: 'code'; language: string | null; code: string }
-  | {
-      kind: 'tool_hint'
-      name: string | null
-      argumentsPreview: string | null
-      isTruncated: boolean
-      status: 'complete' | 'partial'
-    }
+  | ConversationVisualBlock
   | { kind: 'detail'; category: string; title: string; body: string | null }
 
 export interface TimelineContentModel {
   blocks: readonly TimelineVisualBlock[]
 }
-
-const CODE_FENCE_PATTERN = /```([^\n`]*)\n?([\s\S]*?)```/g
 
 export function formatTimelineContent(
   event: Pick<SessionTimelineEvent, 'content' | 'tool_calls' | 'detail'>,
@@ -28,55 +27,6 @@ export function formatTimelineContent(
       ...extractDetailBlocks(event.detail),
     ],
   }
-}
-
-function extractContentBlocks(content: string | null): TimelineVisualBlock[] {
-  if (content == null || content.length === 0) {
-    return []
-  }
-
-  const blocks: TimelineVisualBlock[] = []
-  let lastIndex = 0
-
-  for (const match of content.matchAll(CODE_FENCE_PATTERN)) {
-    const [fullMatch, languageHint, code] = match
-    const matchIndex = match.index ?? 0
-
-    pushTextBlock(blocks, content.slice(lastIndex, matchIndex))
-    blocks.push({
-      kind: 'code',
-      language: normalizeLanguage(languageHint),
-      code,
-    })
-    lastIndex = matchIndex + fullMatch.length
-  }
-
-  pushTextBlock(blocks, content.slice(lastIndex))
-
-  return blocks
-}
-
-function pushTextBlock(blocks: TimelineVisualBlock[], text: string) {
-  if (text.length === 0) {
-    return
-  }
-
-  blocks.push({
-    kind: 'text',
-    text,
-  })
-}
-
-function extractToolHintBlocks(
-  toolCalls: SessionTimelineEvent['tool_calls'] | undefined,
-): TimelineVisualBlock[] {
-  return (toolCalls ?? []).map((toolCall) => ({
-    kind: 'tool_hint',
-    name: toolCall.name,
-    argumentsPreview: toolCall.arguments_preview,
-    isTruncated: toolCall.is_truncated,
-    status: toolCall.status,
-  }))
 }
 
 function extractDetailBlocks(detail: SessionTimelineEvent['detail']): TimelineVisualBlock[] {
@@ -94,8 +44,68 @@ function extractDetailBlocks(detail: SessionTimelineEvent['detail']): TimelineVi
   ]
 }
 
-function normalizeLanguage(value: string): string | null {
-  const language = value.trim()
+export interface ActivityContentModel {
+  sequence: number
+  category: string
+  title: string
+  summary: string | null
+  rawType: string | null
+  mappingStatus: 'complete' | 'partial'
+  occurredAt: string | null
+  sourcePath: string | null
+  rawAvailable: boolean
+  degraded: boolean
+  issues: SessionActivityEntry['issues']
+  blocks: readonly TimelineVisualBlock[]
+}
 
-  return language.length > 0 ? language : null
+export function formatActivityContent(entry: SessionActivityEntry): ActivityContentModel {
+  return {
+    sequence: entry.sequence,
+    category: entry.category,
+    title: entry.title,
+    summary: entry.summary,
+    rawType: entry.raw_type,
+    mappingStatus: entry.mapping_status,
+    occurredAt: entry.occurred_at,
+    sourcePath: entry.source_path,
+    rawAvailable: entry.raw_available,
+    degraded: entry.degraded,
+    issues: entry.issues,
+    blocks: [
+      {
+        kind: 'detail',
+        category: entry.category,
+        title: entry.title,
+        body: entry.summary,
+      },
+    ],
+  }
+}
+
+export function deriveConversationEntriesFromTimeline(
+  timeline: readonly SessionTimelineEvent[],
+): SessionConversationEntry[] {
+  return timeline
+    .filter(isConversationTimelineEvent)
+    .map((event) => ({
+      sequence: event.sequence,
+      role: event.role,
+      content: event.content,
+      occurred_at: event.occurred_at,
+      tool_calls: event.tool_calls,
+      degraded: event.degraded,
+      issues: event.issues,
+    }))
+}
+
+function isConversationTimelineEvent(
+  event: SessionTimelineEvent,
+): event is SessionTimelineEvent & { role: 'user' | 'assistant'; content: string } {
+  return (
+    event.kind === 'message' &&
+    (event.role === 'user' || event.role === 'assistant') &&
+    event.content != null &&
+    event.content.length > 0
+  )
 }

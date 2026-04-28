@@ -86,15 +86,15 @@
   - _Depends: 4.2_
   - _Requirements: 7.2, 7.4_
 
-- [ ] 5. Frontend: typed API と presentation helper を conversation-first に更新する
-- [ ] 5.1 frontend の session API 型と raw 明示取得 client を更新する
+- [x] 5. Frontend: typed API と presentation helper を conversation-first に更新する
+- [x] 5.1 frontend の session API 型と raw 明示取得 client を更新する
   - conversation、activity、timeline、conversation summary、source state、raw_included を型として表現する。
   - 通常 detail と raw 明示 detail を typed client から区別して取得できるようにする。
   - 完了時には frontend が source format や raw payload shape を直接判定せず、API contract だけで session data を扱える。
   - _Depends: 4.1, 4.2, 4.3_
   - _Requirements: 2.3, 2.4, 5.1, 7.2, 7.3_
 
-- [ ] 5.2 (P) conversation content helper で本文と tool hint を読解可能に整形する
+- [x] 5.2 (P) conversation content helper で本文と tool hint を読解可能に整形する
   - 改行、コードブロック、長い本文を保持して conversation entry を表示用 block にする。
   - assistant 発話内の tool request を本文とは別の付帯情報として表示できる model にする。
   - 完了時には user / assistant の本文と tool hint が順序を崩さず、同じ helper から生成される。
@@ -102,7 +102,7 @@
   - _Requirements: 2.5, 4.1, 4.2, 4.3_
   - _Boundary: Conversation presentation helper_
 
-- [ ] 5.3 (P) activity / timeline helper で internal activity と fallback 表示を分離する
+- [x] 5.3 (P) activity / timeline helper で internal activity と fallback 表示を分離する
   - activity entry の category、summary、mapping status、issue を message と混同しない表示 model にする。
   - conversation が未提供の response でも既存 timeline から同じ抽出条件で fallback 表示できるようにする。
   - 完了時には internal activity、unknown、partial event が主会話本文とは別の secondary 表示用 model になる。

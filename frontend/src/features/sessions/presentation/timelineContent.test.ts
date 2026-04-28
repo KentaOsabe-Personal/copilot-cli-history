@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import type { SessionTimelineEvent } from '../api/sessionApi.types.ts'
-import { formatTimelineContent } from './timelineContent.ts'
+import type { SessionActivityEntry, SessionTimelineEvent } from '../api/sessionApi.types.ts'
+import {
+  deriveConversationEntriesFromTimeline,
+  formatActivityContent,
+  formatTimelineContent,
+} from './timelineContent.ts'
 
 interface TimelineToolCallSummary {
   name: string | null
@@ -128,5 +132,102 @@ describe('formatTimelineContent', () => {
         },
       ],
     })
+  })
+})
+
+function buildActivity(overrides: Partial<SessionActivityEntry> = {}): SessionActivityEntry {
+  return {
+    sequence: 4,
+    category: 'unknown',
+    title: 'mystery.event',
+    summary: 'unknown payload was retained',
+    raw_type: 'mystery.event',
+    mapping_status: 'partial',
+    occurred_at: '2026-04-26T09:00:04Z',
+    source_path: '/tmp/session/events.jsonl',
+    raw_available: true,
+    raw_payload: null,
+    degraded: true,
+    issues: [],
+    ...overrides,
+  }
+}
+
+describe('formatActivityContent', () => {
+  it('formats internal activity without message content blocks', () => {
+    expect(formatActivityContent(buildActivity())).toEqual({
+      sequence: 4,
+      category: 'unknown',
+      title: 'mystery.event',
+      summary: 'unknown payload was retained',
+      rawType: 'mystery.event',
+      mappingStatus: 'partial',
+      occurredAt: '2026-04-26T09:00:04Z',
+      sourcePath: '/tmp/session/events.jsonl',
+      rawAvailable: true,
+      degraded: true,
+      issues: [],
+      blocks: [
+        {
+          kind: 'detail',
+          category: 'unknown',
+          title: 'mystery.event',
+          body: 'unknown payload was retained',
+        },
+      ],
+    })
+  })
+})
+
+describe('deriveConversationEntriesFromTimeline', () => {
+  it('falls back to non-empty user and assistant messages only', () => {
+    const timeline: readonly SessionTimelineEvent[] = [
+      buildEvent({
+        sequence: 1,
+        role: 'user',
+        content: 'hello',
+      }),
+      buildEvent({
+        sequence: 2,
+        role: 'assistant',
+        content: '',
+        tool_calls: [
+          {
+            name: 'functions.bash',
+            arguments_preview: '{"command":"pwd"}',
+            is_truncated: false,
+            status: 'complete',
+          },
+        ],
+      }),
+      buildEvent({
+        sequence: 3,
+        kind: 'detail',
+        role: null,
+        content: 'tool output',
+      }),
+      buildEvent({
+        sequence: 4,
+        role: 'assistant',
+        content: 'answer',
+      }),
+    ]
+
+    expect(deriveConversationEntriesFromTimeline(timeline).map((entry) => ({
+      sequence: entry.sequence,
+      role: entry.role,
+      content: entry.content,
+    }))).toEqual([
+      {
+        sequence: 1,
+        role: 'user',
+        content: 'hello',
+      },
+      {
+        sequence: 4,
+        role: 'assistant',
+        content: 'answer',
+      },
+    ])
   })
 })

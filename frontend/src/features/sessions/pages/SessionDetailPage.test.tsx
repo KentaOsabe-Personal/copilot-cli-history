@@ -25,7 +25,9 @@ function buildDetail(overrides: Partial<SessionDetail> = {}): SessionDetail {
       branch: 'main',
     },
     selected_model: 'gpt-5.4',
+    source_state: 'degraded',
     degraded: true,
+    raw_included: false,
     issues: [
       {
         code: 'session.partial',
@@ -37,6 +39,75 @@ function buildDetail(overrides: Partial<SessionDetail> = {}): SessionDetail {
       },
     ],
     message_snapshots: [],
+    conversation: {
+      entries: [
+        {
+          sequence: 1,
+          role: 'assistant',
+          content: '説明です\n```ts\nconst answer = 42\n```',
+          occurred_at: '2026-04-26T09:00:02Z',
+          tool_calls: [
+            {
+              name: 'functions.bash',
+              arguments_preview: '{"command":"pwd"}',
+              is_truncated: false,
+              status: 'complete',
+            },
+          ],
+          degraded: false,
+          issues: [],
+        },
+      ],
+      message_count: 1,
+      empty_reason: null,
+      summary: {
+        has_conversation: true,
+        message_count: 1,
+        preview: '説明です',
+        activity_count: 2,
+      },
+    },
+    activity: {
+      entries: [
+        {
+          sequence: 2,
+          category: 'tool_execution',
+          title: 'tool.execution_start',
+          summary: 'functions.bash / tool-1',
+          raw_type: 'tool.execution_start',
+          mapping_status: 'partial',
+          occurred_at: null,
+          source_path: null,
+          raw_available: true,
+          raw_payload: null,
+          degraded: true,
+          issues: [
+            {
+              code: 'event.partial',
+              severity: 'warning',
+              message: 'event payload is partial',
+              source_path: null,
+              scope: 'event',
+              event_sequence: 2,
+            },
+          ],
+        },
+        {
+          sequence: 3,
+          category: 'unknown',
+          title: 'mystery_event',
+          summary: 'unknown payload stays readable',
+          raw_type: 'mystery_event',
+          mapping_status: 'complete',
+          occurred_at: '2026-04-26T09:00:03Z',
+          source_path: null,
+          raw_available: true,
+          raw_payload: null,
+          degraded: false,
+          issues: [],
+        },
+      ],
+    },
     timeline: [
       {
         sequence: 1,
