@@ -64,22 +64,22 @@
   - 完了時には current / legacy / workspace-only / degraded session の一覧識別情報が同じ summary contract で返る。
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 6.4_
 
-- [ ] 4. API: index / detail response を conversation-first contract に接続する
-- [ ] 4.1 session index response に会話 summary と補正済み状態を出す
+- [x] 4. API: index / detail response を conversation-first contract に接続する
+- [x] 4.1 session index response に会話 summary と補正済み状態を出す
   - 一覧の sort が補正済み updated_at を使い、current / legacy 混在時も利用者が時刻の意味を推測しなくてよいようにする。
   - conversation summary、source state、degraded issue を一覧 DTO に含める。
   - 完了時には一覧から会話あり session、workspace-only session、degraded session を開く前に判別できる。
   - _Depends: 2.2, 3.3_
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 6.1, 6.2, 6.3, 6.4_
 
-- [ ] 4.2 session detail response を conversation / activity / timeline に分離する
+- [x] 4.2 session detail response を conversation / activity / timeline に分離する
   - detail DTO に conversation、activity、timeline、raw_included、session issue、event issue を含める。
   - 通常 detail では raw payload を `nil` にし、classification と degraded 判断に必要な情報だけを返す。
   - 完了時には detail endpoint の初期 response が raw payload の量に依存せず、conversation first 表示に必要な情報を持つ。
   - _Depends: 3.1, 3.2_
   - _Requirements: 2.1, 2.3, 2.4, 7.1, 7.3, 8.1, 8.3, 8.4_
 
-- [ ] 4.3 raw 明示要求を controller から presenter へ伝搬する
+- [x] 4.3 raw 明示要求を controller から presenter へ伝搬する
   - `include_raw=true` のときだけ raw payload を detail response に入れ、それ以外の値や未指定は通常 detail と同じ扱いにする。
   - raw inclusion policy は query ではなく controller と presenter の API 境界に閉じる。
   - 完了時には通常 detail と raw 付き detail が同じ top-level shape を保ち、raw_included で違いを判別できる。

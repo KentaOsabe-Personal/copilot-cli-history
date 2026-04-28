@@ -18,7 +18,7 @@ module Api
 
       case result
       when CopilotHistory::Api::Types::SessionLookupResult::Found
-        render json: session_detail_presenter.call(result: result), status: :ok
+        render json: session_detail_presenter.call(result: result, include_raw: include_raw?), status: :ok
       when CopilotHistory::Api::Types::SessionLookupResult::NotFound
         render_error(*error_presenter.from_not_found(session_id: result.session_id))
       when CopilotHistory::Types::ReadResult::Failure
@@ -52,6 +52,10 @@ module Api
 
     def error_presenter
       @error_presenter ||= CopilotHistory::Api::Presenters::ErrorPresenter.new
+    end
+
+    def include_raw?
+      params[:include_raw] == "true"
     end
   end
 end

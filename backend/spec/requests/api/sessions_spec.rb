@@ -42,8 +42,15 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
                 branch: "feature/history"
               },
               selected_model: nil,
+              source_state: "complete",
               event_count: 2,
               message_snapshot_count: 0,
+              conversation_summary: {
+                has_conversation: true,
+                message_count: 2,
+                preview: "mixed root current session",
+                activity_count: 0
+              },
               degraded: false,
               issues: []
             },
@@ -59,8 +66,15 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
                 branch: nil
               },
               selected_model: "gpt-5.4",
+              source_state: "complete",
               event_count: 1,
               message_snapshot_count: 1,
+              conversation_summary: {
+                has_conversation: true,
+                message_count: 1,
+                preview: "legacy mixed event",
+                activity_count: 0
+              },
               degraded: false,
               issues: []
             }
@@ -101,8 +115,15 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
                   branch: nil
                 },
                 selected_model: nil,
+                source_state: "degraded",
                 event_count: 2,
                 message_snapshot_count: 0,
+                conversation_summary: {
+                  has_conversation: true,
+                  message_count: 2,
+                  preview: "mixed root current session",
+                  activity_count: 0
+                },
                 degraded: true,
                 issues: [
                   {
@@ -127,8 +148,15 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
                   branch: nil
                 },
                 selected_model: "gpt-5.4",
+                source_state: "complete",
                 event_count: 1,
                 message_snapshot_count: 1,
+                conversation_summary: {
+                  has_conversation: true,
+                  message_count: 1,
+                  preview: "legacy mixed event",
+                  activity_count: 0
+                },
                 degraded: false,
                 issues: []
               }
@@ -179,8 +207,8 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
         get "/api/sessions/legacy-mixed"
 
         expect(response).to have_http_status(:ok)
-        expect(JSON.parse(response.body, symbolize_names: true)).to eq(
-          data: {
+        payload = JSON.parse(response.body, symbolize_names: true).fetch(:data)
+        expect(payload).to include(
             id: "legacy-mixed",
             source_format: "legacy",
             created_at: "2026-04-26T07:50:00Z",
@@ -192,18 +220,59 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
               branch: nil
             },
             selected_model: "gpt-5.4",
+            source_state: "degraded",
             degraded: true,
+            raw_included: false,
             issues: [],
             message_snapshots: [
               {
                 role: "assistant",
                 content: "legacy mixed transcript",
-                raw_payload: {
-                  role: "assistant",
-                  content: "legacy mixed transcript"
-                }
+                raw_payload: nil
               }
             ],
+            conversation: {
+              entries: [
+                {
+                  sequence: 1,
+                  role: "assistant",
+                  content: "legacy mixed event",
+                  occurred_at: "2026-04-26T07:50:01Z",
+                  tool_calls: [],
+                  degraded: false,
+                  issues: []
+                },
+                {
+                  sequence: 2,
+                  role: "assistant",
+                  content: "legacy partial event",
+                  occurred_at: nil,
+                  tool_calls: [],
+                  degraded: true,
+                  issues: [
+                    {
+                      code: "event.partial_mapping",
+                      severity: "warning",
+                      message: "event payload matched partially",
+                      source_path: legacy_path.to_s,
+                      scope: "event",
+                      event_sequence: 2
+                    }
+                  ]
+                }
+              ],
+              message_count: 2,
+              empty_reason: nil,
+              summary: {
+                has_conversation: true,
+                message_count: 2,
+                preview: "legacy mixed event",
+                activity_count: 0
+              }
+            },
+            activity: {
+              entries: []
+            },
             timeline: [
               {
                 sequence: 1,
@@ -215,12 +284,7 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
                 content: "legacy mixed event",
                 tool_calls: [],
                 detail: nil,
-                raw_payload: {
-                  type: "assistant_message",
-                  role: "assistant",
-                  content: "legacy mixed event",
-                  timestamp: "2026-04-26T07:50:01Z"
-                },
+                raw_payload: nil,
                 degraded: false,
                 issues: []
               },
@@ -234,11 +298,7 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
                 content: "legacy partial event",
                 tool_calls: [],
                 detail: nil,
-                raw_payload: {
-                  type: "assistant_message",
-                  role: "assistant",
-                  content: "legacy partial event"
-                },
+                raw_payload: nil,
                 degraded: true,
                 issues: [
                   {
@@ -252,18 +312,21 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
                 ]
               }
             ]
-          }
         )
-        expect(JSON.parse(response.body, symbolize_names: true).fetch(:data).keys).to contain_exactly(
+        expect(payload.keys).to contain_exactly(
           :id,
           :source_format,
           :created_at,
           :updated_at,
           :work_context,
           :selected_model,
+          :source_state,
           :degraded,
+          :raw_included,
           :issues,
           :message_snapshots,
+          :conversation,
+          :activity,
           :timeline
         )
       end
@@ -353,6 +416,28 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
           }
         )
         expect(payload.fetch(:issues)).to eq([])
+      end
+    end
+
+    it "only includes raw payloads when include_raw is exactly true" do
+      with_copilot_history_fixture("current_schema_valid") do |root|
+        ENV["COPILOT_HOME"] = root.to_s
+
+        get "/api/sessions/current-schema-valid", params: { include_raw: "false" }
+
+        expect(response).to have_http_status(:ok)
+        normal_payload = JSON.parse(response.body, symbolize_names: true).fetch(:data)
+        expect(normal_payload.fetch(:raw_included)).to eq(false)
+        expect(normal_payload.fetch(:timeline).map { |event| event.fetch(:raw_payload) }).to all(be_nil)
+        expect(normal_payload.dig(:activity, :entries).map { |entry| entry.fetch(:raw_payload) }).to all(be_nil)
+
+        get "/api/sessions/current-schema-valid", params: { include_raw: "true" }
+
+        expect(response).to have_http_status(:ok)
+        raw_payload = JSON.parse(response.body, symbolize_names: true).fetch(:data)
+        expect(raw_payload.fetch(:raw_included)).to eq(true)
+        expect(raw_payload.fetch(:timeline).map { |event| event.fetch(:raw_payload) }).to include(a_kind_of(Hash))
+        expect(raw_payload.dig(:activity, :entries).map { |entry| entry.fetch(:raw_payload) }).to include(a_kind_of(Hash))
       end
     end
 

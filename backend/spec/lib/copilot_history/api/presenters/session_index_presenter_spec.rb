@@ -18,6 +18,7 @@ RSpec.describe CopilotHistory::Api::Presenters::SessionIndexPresenter do
           CopilotHistory::Types::NormalizedSession.new(
             session_id: "current-mixed",
             source_format: :current,
+            source_state: :degraded,
             cwd: "/workspace/current-mixed",
             git_root: "/workspace/current-mixed",
             repository: "octo/example",
@@ -72,8 +73,15 @@ RSpec.describe CopilotHistory::Api::Presenters::SessionIndexPresenter do
               branch: "feature/history"
             },
             selected_model: nil,
+            source_state: "degraded",
             event_count: 2,
             message_snapshot_count: 0,
+            conversation_summary: {
+              has_conversation: true,
+              message_count: 1,
+              preview: "current",
+              activity_count: 1
+            },
             degraded: true,
             issues: [
               {
@@ -98,8 +106,15 @@ RSpec.describe CopilotHistory::Api::Presenters::SessionIndexPresenter do
               branch: nil
             },
             selected_model: "gpt-5.4",
+            source_state: "complete",
             event_count: 1,
             message_snapshot_count: 1,
+            conversation_summary: {
+              has_conversation: true,
+              message_count: 1,
+              preview: "legacy",
+              activity_count: 0
+            },
             degraded: false,
             issues: []
           }
@@ -124,6 +139,7 @@ RSpec.describe CopilotHistory::Api::Presenters::SessionIndexPresenter do
     CopilotHistory::Types::NormalizedEvent.new(
       sequence: sequence,
       kind: kind,
+      mapping_status: kind == :unknown ? :partial : :complete,
       raw_type: raw_type,
       occurred_at: occurred_at,
       role: role,
