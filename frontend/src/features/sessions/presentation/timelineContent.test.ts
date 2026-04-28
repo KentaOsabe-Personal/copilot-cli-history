@@ -3,14 +3,36 @@ import { describe, expect, it } from 'vitest'
 import type { SessionTimelineEvent } from '../api/sessionApi.types.ts'
 import { formatTimelineContent } from './timelineContent.ts'
 
-function buildEvent(overrides: Partial<SessionTimelineEvent> = {}): SessionTimelineEvent {
+interface TimelineToolCallSummary {
+  name: string | null
+  arguments_preview: string | null
+  is_truncated: boolean
+  status: 'complete' | 'partial'
+}
+
+interface TimelineDetailSummary {
+  category: string
+  title: string
+  body: string | null
+}
+
+type TimelineEventForContent = SessionTimelineEvent & {
+  mapping_status: 'complete' | 'partial'
+  tool_calls: readonly TimelineToolCallSummary[]
+  detail: TimelineDetailSummary | null
+}
+
+function buildEvent(overrides: Partial<TimelineEventForContent> = {}): TimelineEventForContent {
   return {
     sequence: 1,
     kind: 'message',
+    mapping_status: 'complete',
     raw_type: 'assistant_message',
     occurred_at: '2026-04-26T09:00:02Z',
     role: 'assistant',
     content: 'plain text',
+    tool_calls: [],
+    detail: null,
     raw_payload: {},
     degraded: false,
     issues: [],
@@ -19,19 +41,17 @@ function buildEvent(overrides: Partial<SessionTimelineEvent> = {}): SessionTimel
 }
 
 describe('formatTimelineContent', () => {
-  it('extracts tool hints and fenced code while preserving text/code order', () => {
+  it('extracts tool hints from canonical helper fields and preserves text/code order', () => {
     const event = buildEvent({
       content: 'Before code\n```ts\nconst answer = 42\n```\nAfter code',
-      raw_payload: {
-        toolRequests: [
-          {
-            toolName: 'bash',
-            arguments: {
-              command: 'pwd',
-            },
-          },
-        ],
-      },
+      tool_calls: [
+        {
+          name: 'functions.bash',
+          arguments_preview: '{"command":"pwd"}',
+          is_truncated: false,
+          status: 'complete',
+        },
+      ],
     })
 
     expect(formatTimelineContent(event)).toEqual({
@@ -51,54 +71,60 @@ describe('formatTimelineContent', () => {
         },
         {
           kind: 'tool_hint',
-          name: 'bash',
+          name: 'functions.bash',
           argumentsPreview: '{"command":"pwd"}',
+          isTruncated: false,
+          status: 'complete',
         },
       ],
     })
   })
 
-  it('falls back to plain text when the payload does not match a recognized tool hint schema', () => {
-    const event = buildEvent({
-      content: 'Unknown tool payload should stay readable',
-      raw_payload: {
-        toolRequests: [
-          {
-            label: 'bash',
-          },
-        ],
-      },
-    })
-
-    expect(formatTimelineContent(event)).toEqual({
-      blocks: [
-        {
-          kind: 'text',
-          text: 'Unknown tool payload should stay readable',
-        },
-      ],
-    })
-  })
-
-  it('still exposes a tool hint when content is empty', () => {
+  it('keeps partial tool summaries even when only a subset of fields is available', () => {
     const event = buildEvent({
       content: null,
-      raw_payload: {
-        toolRequests: [
-          {
-            name: 'write_bash',
-            arguments: '{"input":"y"}',
-          },
-        ],
-      },
+      tool_calls: [
+        {
+          name: null,
+          arguments_preview: '{"input":"y"}',
+          is_truncated: true,
+          status: 'partial',
+        },
+      ],
     })
 
     expect(formatTimelineContent(event)).toEqual({
       blocks: [
         {
           kind: 'tool_hint',
-          name: 'write_bash',
+          name: null,
           argumentsPreview: '{"input":"y"}',
+          isTruncated: true,
+          status: 'partial',
+        },
+      ],
+    })
+  })
+
+  it('formats non-message detail summaries as dedicated blocks', () => {
+    const event = buildEvent({
+      kind: 'detail',
+      role: null,
+      content: null,
+      detail: {
+        category: 'tool_execution',
+        title: 'tool.execution_start',
+        body: 'functions.bash / tool-1',
+      },
+    })
+
+    expect(formatTimelineContent(event)).toEqual({
+      blocks: [
+        {
+          kind: 'detail',
+          category: 'tool_execution',
+          title: 'tool.execution_start',
+          body: 'functions.bash / tool-1',
         },
       ],
     })

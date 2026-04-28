@@ -43,13 +43,13 @@
   - _Boundary: SessionDetailQuery_
   - _Depends: 2.3_
 
-- [ ] 3. Core: frontend を canonical helper field ベースの描画へ切り替える
-- [ ] 3.1 session detail 型と timeline formatter を canonical helper field ベースに更新する
+- [x] 3. Core: frontend を canonical helper field ベースの描画へ切り替える
+- [x] 3.1 session detail 型と timeline formatter を canonical helper field ベースに更新する
   - `content` の code fence 分解を維持しつつ、`tool_calls` と `detail` を通常本文と別 block として扱う。
   - raw payload の path や source format 判定を持ち込まず、nullable default と fixed shape だけで block model を組み立てる。
   - current と legacy の両 DTO から本文、tool hint、detail summary を同じ formatter で順序どおり生成できる状態になる。
   - _Requirements: 2.1, 2.2, 2.4, 3.2, 4.2_
-- [ ] 3.2 TimelineEntry / TimelineContent UI で kind と mapping_status の差を視覚的に分離する
+- [x] 3.2 TimelineEntry / TimelineContent UI で kind と mapping_status の差を視覚的に分離する
   - `message`、`detail`、`unknown` の badge と summary を出し分け、role badge は message のみに限定する。
   - `mapping_status=partial` を secondary 表示に留め、event issue と session issue の説明を会話本文と混同させない。
   - degraded current session と clean legacy session の両方で、会話本文の順序を保ったまま event ごとの差が読める状態になる。

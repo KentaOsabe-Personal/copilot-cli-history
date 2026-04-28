@@ -41,31 +41,41 @@ function buildDetail(overrides: Partial<SessionDetail> = {}): SessionDetail {
       {
         sequence: 1,
         kind: 'message',
+        mapping_status: 'complete',
         raw_type: 'assistant_message',
         occurred_at: '2026-04-26T09:00:02Z',
         role: 'assistant',
         content: '説明です\n```ts\nconst answer = 42\n```',
-        raw_payload: {
-          toolRequests: [
-            {
-              toolName: 'bash',
-              arguments: {
-                command: 'pwd',
-              },
-            },
-          ],
-        },
+        tool_calls: [
+          {
+            name: 'functions.bash',
+            arguments_preview: '{"command":"pwd"}',
+            is_truncated: false,
+            status: 'complete',
+          },
+        ],
+        detail: null,
+        raw_payload: {},
         degraded: false,
         issues: [],
       },
       {
         sequence: 2,
-        kind: 'partial',
-        raw_type: 'assistant_partial',
+        kind: 'detail',
+        mapping_status: 'partial',
+        raw_type: 'tool.execution_start',
         occurred_at: null,
-        role: 'assistant',
-        content: 'partial payload remains readable',
-        raw_payload: {},
+        role: null,
+        content: null,
+        tool_calls: [],
+        detail: {
+          category: 'tool_execution',
+          title: 'tool.execution_start',
+          body: 'functions.bash / tool-1',
+        },
+        raw_payload: {
+          type: 'tool.execution_start',
+        },
         degraded: true,
         issues: [
           {
@@ -81,10 +91,13 @@ function buildDetail(overrides: Partial<SessionDetail> = {}): SessionDetail {
       {
         sequence: 3,
         kind: 'unknown',
+        mapping_status: 'complete',
         raw_type: 'mystery_event',
         occurred_at: '2026-04-26T09:00:03Z',
         role: null,
         content: 'unknown payload stays readable',
+        tool_calls: [],
+        detail: null,
         raw_payload: {
           toolRequests: [
             {
@@ -147,12 +160,14 @@ describe('SessionDetailPage', () => {
     expect(screen.getAllByText('警告').length).toBeGreaterThan(0)
     expect(screen.getByText('セッション全体')).toBeInTheDocument()
     expect(screen.getByText('message')).toBeInTheDocument()
-    expect(screen.getAllByText('assistant').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('assistant')).toHaveLength(1)
     expect(screen.getByText('イベント #1')).toBeInTheDocument()
     expect(screen.getByText('説明です')).toBeInTheDocument()
     expect(screen.getByText('const answer = 42')).toBeInTheDocument()
-    expect(screen.getByText('bash')).toBeInTheDocument()
-    expect(screen.getByText('partial payload remains readable')).toBeInTheDocument()
+    expect(screen.getByText('functions.bash')).toBeInTheDocument()
+    expect(screen.getByText('詳細イベント')).toBeInTheDocument()
+    expect(screen.getAllByText('tool.execution_start').length).toBeGreaterThan(0)
+    expect(screen.getByText('functions.bash / tool-1')).toBeInTheDocument()
     expect(screen.getByText('event payload is partial')).toBeInTheDocument()
   })
 
@@ -173,13 +188,57 @@ describe('SessionDetailPage', () => {
       'イベント #3',
     ])
     expect(screen.getByText('message')).toBeInTheDocument()
+    expect(screen.getByText('detail')).toBeInTheDocument()
     expect(screen.getByText('partial')).toBeInTheDocument()
     expect(screen.getByText('unknown')).toBeInTheDocument()
     expect(screen.getByText('const answer = 42')).toBeInTheDocument()
-    expect(screen.getByText('bash')).toBeInTheDocument()
-    expect(screen.getByText('partial payload remains readable')).toBeInTheDocument()
+    expect(screen.getByText('functions.bash')).toBeInTheDocument()
+    expect(screen.getByText('functions.bash / tool-1')).toBeInTheDocument()
     expect(screen.getByText('unknown payload stays readable')).toBeInTheDocument()
     expect(screen.queryByText('write_bash')).not.toBeInTheDocument()
+  })
+
+  it('renders a clean legacy session in the same detail flow without schema-specific UI', () => {
+    mockedUseSessionDetail.mockReturnValue({
+      state: {
+        status: 'success',
+        sessionId: 'legacy-session-123',
+        detail: buildDetail({
+          id: 'legacy-session-123',
+          source_format: 'legacy',
+          degraded: false,
+          issues: [],
+          timeline: [
+            {
+              sequence: 1,
+              kind: 'message',
+              mapping_status: 'complete',
+              raw_type: 'assistant_message',
+              occurred_at: '2026-04-26T08:59:00Z',
+              role: 'assistant',
+              content: 'legacy transcript remains readable',
+              tool_calls: [],
+              detail: null,
+              raw_payload: {
+                type: 'assistant_message',
+              },
+              degraded: false,
+              issues: [],
+            },
+          ],
+        }),
+      },
+    })
+
+    renderDetailPage('/sessions/legacy-session-123')
+
+    expect(screen.getAllByText('legacy-session-123').length).toBeGreaterThan(0)
+    expect(screen.getByText('正常')).toBeInTheDocument()
+    expect(screen.getByText('message')).toBeInTheDocument()
+    expect(screen.getByText('assistant')).toBeInTheDocument()
+    expect(screen.getByText('legacy transcript remains readable')).toBeInTheDocument()
+    expect(screen.queryByText('partial')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'セッションの issue' })).not.toBeInTheDocument()
   })
 
   it('renders a dedicated not found panel with a link back to the index', () => {

@@ -43,13 +43,35 @@ export interface SessionMessageSnapshot {
   raw_payload: unknown
 }
 
+export type SessionTimelineKind = 'message' | 'detail' | 'unknown'
+
+export type SessionTimelineMappingStatus = 'complete' | 'partial'
+
+export type SessionToolCallStatus = 'complete' | 'partial'
+
+export interface SessionTimelineToolCall {
+  name: string | null
+  arguments_preview: string | null
+  is_truncated: boolean
+  status: SessionToolCallStatus
+}
+
+export interface SessionTimelineDetail {
+  category: string
+  title: string
+  body: string | null
+}
+
 export interface SessionTimelineEvent {
   sequence: number
-  kind: string
+  kind: SessionTimelineKind
+  mapping_status: SessionTimelineMappingStatus
   raw_type: string | null
   occurred_at: string | null
   role: string | null
   content: string | null
+  tool_calls: readonly SessionTimelineToolCall[]
+  detail: SessionTimelineDetail | null
   raw_payload: unknown
   degraded: boolean
   issues: readonly SessionIssue[]

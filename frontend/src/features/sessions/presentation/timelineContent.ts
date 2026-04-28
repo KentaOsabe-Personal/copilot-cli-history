@@ -3,7 +3,14 @@ import type { SessionTimelineEvent } from '../api/sessionApi.types.ts'
 export type TimelineVisualBlock =
   | { kind: 'text'; text: string }
   | { kind: 'code'; language: string | null; code: string }
-  | { kind: 'tool_hint'; name: string; argumentsPreview: string | null }
+  | {
+      kind: 'tool_hint'
+      name: string | null
+      argumentsPreview: string | null
+      isTruncated: boolean
+      status: 'complete' | 'partial'
+    }
+  | { kind: 'detail'; category: string; title: string; body: string | null }
 
 export interface TimelineContentModel {
   blocks: readonly TimelineVisualBlock[]
@@ -12,12 +19,13 @@ export interface TimelineContentModel {
 const CODE_FENCE_PATTERN = /```([^\n`]*)\n?([\s\S]*?)```/g
 
 export function formatTimelineContent(
-  event: Pick<SessionTimelineEvent, 'content' | 'raw_payload'>,
+  event: Pick<SessionTimelineEvent, 'content' | 'tool_calls' | 'detail'>,
 ): TimelineContentModel {
   return {
     blocks: [
       ...extractContentBlocks(event.content),
-      ...extractToolHintBlocks(event.raw_payload),
+      ...extractToolHintBlocks(event.tool_calls),
+      ...extractDetailBlocks(event.detail),
     ],
   }
 }
@@ -59,67 +67,35 @@ function pushTextBlock(blocks: TimelineVisualBlock[], text: string) {
   })
 }
 
-function extractToolHintBlocks(rawPayload: unknown): TimelineVisualBlock[] {
-  const payload = asRecord(rawPayload)
-  const toolRequests = payload?.toolRequests
+function extractToolHintBlocks(
+  toolCalls: SessionTimelineEvent['tool_calls'] | undefined,
+): TimelineVisualBlock[] {
+  return (toolCalls ?? []).map((toolCall) => ({
+    kind: 'tool_hint',
+    name: toolCall.name,
+    argumentsPreview: toolCall.arguments_preview,
+    isTruncated: toolCall.is_truncated,
+    status: toolCall.status,
+  }))
+}
 
-  if (!Array.isArray(toolRequests)) {
+function extractDetailBlocks(detail: SessionTimelineEvent['detail']): TimelineVisualBlock[] {
+  if (detail == null) {
     return []
   }
 
-  return toolRequests.flatMap((toolRequest) => {
-    const request = asRecord(toolRequest)
-    const name = readString(request?.toolName) ?? readString(request?.name)
-
-    if (name == null) {
-      return []
-    }
-
-    return [
-      {
-        kind: 'tool_hint' as const,
-        name,
-        argumentsPreview: formatArgumentsPreview(
-          request?.arguments ?? request?.input ?? request?.parameters ?? null,
-        ),
-      },
-    ]
-  })
-}
-
-function formatArgumentsPreview(value: unknown): string | null {
-  if (value == null) {
-    return null
-  }
-
-  if (typeof value === 'string') {
-    return value
-  }
-
-  if (
-    typeof value === 'number' ||
-    typeof value === 'boolean' ||
-    Array.isArray(value) ||
-    typeof value === 'object'
-  ) {
-    return JSON.stringify(value)
-  }
-
-  return String(value)
+  return [
+    {
+      kind: 'detail',
+      category: detail.category,
+      title: detail.title,
+      body: detail.body,
+    },
+  ]
 }
 
 function normalizeLanguage(value: string): string | null {
   const language = value.trim()
 
   return language.length > 0 ? language : null
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === 'object' && value != null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null
-}
-
-function readString(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null
 }
