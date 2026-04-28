@@ -15,7 +15,7 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
             repository: "octo/example",
             branch: "main",
             created_at: "2026-04-26T09:00:00Z",
-            updated_at: "2026-04-26T09:05:00Z",
+            updated_at: "2026-04-26T09:00:02Z",
             selected_model: nil,
             events: [
               CopilotHistory::Types::NormalizedEvent.new(
@@ -157,6 +157,23 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
       end
     end
 
+    it "falls back to events.jsonl mtime when readable current events do not contain timestamps" do
+      with_copilot_history_fixture("current_valid") do |root|
+        events_path = root.join("session-state/current-valid/events.jsonl")
+        events_path.write(<<~JSONL)
+          {"type":"user_message","role":"user","content":"show recent sessions"}
+          {"type":"assistant_message","role":"assistant","content":"Here are the latest sessions."}
+        JSONL
+        File.utime(Time.utc(2026, 4, 26, 9, 3, 0), Time.utc(2026, 4, 26, 9, 3, 0), events_path)
+
+        session = described_class.new.call(build_source(root, "current-valid"))
+
+        expect(session.updated_at).to eq(Time.iso8601("2026-04-26T09:03:00Z"))
+        expect(session.source_state).to eq(:degraded)
+        expect(session.events.map(&:sequence)).to eq([ 1, 2 ])
+      end
+    end
+
     it "returns a session issue when workspace.yaml is unreadable but still keeps readable events" do
       with_copilot_history_fixture("current_unreadable") do |root|
         workspace_path = root.join("session-state/current-unreadable/workspace.yaml")
@@ -210,6 +227,7 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
         session = described_class.new.call(build_source(root, "current-schema-valid"))
 
         expect(session.source_state).to eq(:complete)
+        expect(session.updated_at).to eq(Time.iso8601("2026-04-28T01:00:09Z"))
         expect(session.events.map { |event| [ event.sequence, event.kind, event.mapping_status, event.raw_type ] }).to eq(
           [
             [ 1, :message, :complete, "system.message" ],
@@ -263,6 +281,7 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
         session = described_class.new.call(build_source(root, "current-schema-degraded"))
 
         expect(session.source_state).to eq(:degraded)
+        expect(session.updated_at).to eq(Time.iso8601("2026-04-28T02:00:04Z"))
         expect(session.events.map { |event| [ event.sequence, event.kind, event.mapping_status, event.raw_type ] }).to eq(
           [
             [ 1, :message, :complete, "user.message" ],
@@ -318,6 +337,7 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
 
         expect(session.session_id).to eq("current-schema-workspace-only")
         expect(session.source_state).to eq(:workspace_only)
+        expect(session.updated_at).to eq(Time.iso8601("2026-04-28T03:01:00Z"))
         expect(session.events).to eq([])
         expect(session.issues).to eq(
           [

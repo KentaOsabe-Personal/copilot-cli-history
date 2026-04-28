@@ -146,7 +146,7 @@ module CopilotHistory
           kind: :unknown,
           mapping_status: :complete,
           raw_type: raw_type,
-          occurred_at: nil,
+          occurred_at: payload.is_a?(Hash) ? parse_time(payload["timestamp"]) : nil,
           role: nil,
           content: nil,
           tool_calls: [],

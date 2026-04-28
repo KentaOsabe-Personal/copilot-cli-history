@@ -20,21 +20,21 @@
   - 完了時には legacy session の会話数、preview、detail 表示が current 互換追加前と同等であることを検証できる。
   - _Requirements: 1.5, 5.5, 6.4, 8.5_
 
-- [ ] 2. Core: current raw files を補正済み normalized session に変換する
-- [ ] 2.1 current / legacy event を canonical taxonomy へ分類する
+- [x] 2. Core: current raw files を補正済み normalized session に変換する
+- [x] 2.1 current / legacy event を canonical taxonomy へ分類する
   - current の user / assistant / system message から role、content、timestamp、tool request を抽出する。
   - assistant turn、tool execution、hook、skill を internal detail として分類し、未対応 shape を unknown activity へ残す。
   - 空 content の assistant tool request は event として保持しつつ、主会話 entry にならない入力として扱える。
   - 完了時には current / legacy の message、detail、unknown が同じ normalized event shape で返る。
   - _Requirements: 1.1, 1.3, 1.4, 3.1, 4.4, 8.1, 8.2_
 
-- [ ] 2.2 current reader で部分成功、更新時刻補正、source state を扱う
+- [x] 2.2 current reader で部分成功、更新時刻補正、source state を扱う
   - event timestamp、events file mtime、workspace metadata の順で current session の更新時刻を決める。
   - events missing、events unreadable、workspace parse failure、JSONL parse failure、unknown / partial event の違いを issue と source state に反映する。
   - 完了時には workspace-only は通常会話 session と区別され、invalid line があっても読めた event は sequence 順に残る。
   - _Requirements: 1.2, 5.4, 6.1, 6.2, 6.3, 8.2, 8.4_
 
-- [ ] 2.3 tool request summary の redaction と partial 保持を実装する
+- [x] 2.3 tool request summary の redaction と partial 保持を実装する
   - assistant の本文付き発話に付く tool request から tool 名と入力要約を作る。
   - secret-like key を redact し、長い入力は切り詰め、欠損した tool 情報は partial として保持する。
   - 完了時には tool request の欠損や truncation が会話本文の表示を阻害せず、partial issue と summary で確認できる。

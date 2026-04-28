@@ -34,7 +34,7 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
               id: "current-mixed",
               source_format: "current",
               created_at: "2026-04-26T10:00:00Z",
-              updated_at: "2026-04-26T10:05:00Z",
+              updated_at: "2026-04-26T10:00:02Z",
               work_context: {
                 cwd: "/workspace/current-mixed",
                 git_root: "/workspace/current-mixed",
@@ -90,27 +90,10 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
           expect(JSON.parse(response.body, symbolize_names: true)).to eq(
             data: [
               {
-                id: "legacy-mixed",
-                source_format: "legacy",
-                created_at: "2026-04-26T07:50:00Z",
-                updated_at: nil,
-                work_context: {
-                  cwd: nil,
-                  git_root: nil,
-                  repository: nil,
-                  branch: nil
-                },
-                selected_model: "gpt-5.4",
-                event_count: 1,
-                message_snapshot_count: 1,
-                degraded: false,
-                issues: []
-              },
-              {
                 id: "current-mixed",
                 source_format: "current",
                 created_at: nil,
-                updated_at: nil,
+                updated_at: "2026-04-26T10:00:02Z",
                 work_context: {
                   cwd: nil,
                   git_root: nil,
@@ -131,6 +114,23 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
                     event_sequence: nil
                   }
                 ]
+              },
+              {
+                id: "legacy-mixed",
+                source_format: "legacy",
+                created_at: "2026-04-26T07:50:00Z",
+                updated_at: nil,
+                work_context: {
+                  cwd: nil,
+                  git_root: nil,
+                  repository: nil,
+                  branch: nil
+                },
+                selected_model: "gpt-5.4",
+                event_count: 1,
+                message_snapshot_count: 1,
+                degraded: false,
+                issues: []
               }
             ],
             meta: {
@@ -372,7 +372,7 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
           id: "current-schema-degraded",
           source_format: "current",
           created_at: "2026-04-28T02:00:00Z",
-          updated_at: "2026-04-28T02:03:00Z",
+          updated_at: "2026-04-28T02:00:04Z",
           degraded: true,
           message_snapshots: []
         )

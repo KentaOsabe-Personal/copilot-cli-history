@@ -11,7 +11,7 @@ module CopilotHistory
       raise ArgumentError, "source format must be current" unless source.format == :current
 
       workspace_metadata, workspace_issues = read_workspace(source.artifact_paths.fetch(:workspace))
-      events, event_issues = read_events(source)
+      events, event_issues, events_mtime = read_events(source)
       issues = workspace_issues + event_issues
 
       CopilotHistory::Types::NormalizedSession.new(
@@ -23,7 +23,7 @@ module CopilotHistory
         repository: workspace_metadata["repository"],
         branch: workspace_metadata["branch"],
         created_at: workspace_metadata["created_at"],
-        updated_at: workspace_metadata["updated_at"],
+        updated_at: corrected_updated_at(events:, events_mtime:, workspace_metadata:),
         selected_model: nil,
         events: events,
         message_snapshots: [],
@@ -53,12 +53,13 @@ module CopilotHistory
 
     def read_events(source)
       events_path = source.artifact_paths.fetch(:events)
-      return [ [], [ warning_issue(CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_MISSING, "events.jsonl is missing for current session", events_path) ] ] unless events_path.exist?
-      return [ [], [ error_issue(CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_UNREADABLE, "events.jsonl is not accessible", events_path) ] ] unless readable_file?(events_path)
+      return [ [], [ warning_issue(CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_MISSING, "events.jsonl is missing for current session", events_path) ], nil ] unless events_path.exist?
+      return [ [], [ error_issue(CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_UNREADABLE, "events.jsonl is not accessible", events_path) ], nil ] unless readable_file?(events_path)
 
       normalizer = event_normalizer_class.new(source_path: events_path)
       events = []
       issues = []
+      events_mtime = events_path.stat.mtime
 
       events_path.each_line.with_index(1) do |line, sequence|
         raw_event = JSON.parse(line)
@@ -79,9 +80,9 @@ module CopilotHistory
         )
       end
 
-      [ events, issues ]
+      [ events, issues, events_mtime ]
     rescue SystemCallError
-      [ [].freeze, [ error_issue(CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_UNREADABLE, "events.jsonl is not accessible", events_path) ] ]
+      [ [].freeze, [ error_issue(CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_UNREADABLE, "events.jsonl is not accessible", events_path) ], nil ]
     end
 
     def error_issue(code, message, source_path, sequence: nil)
@@ -136,6 +137,20 @@ module CopilotHistory
 
     def process_groups
       @process_groups ||= [ Process.egid, *Process.groups ].uniq.freeze
+    end
+
+    def corrected_updated_at(events:, events_mtime:, workspace_metadata:)
+      event_updated_at = events.filter_map(&:occurred_at).max
+      event_updated_at || events_mtime || parse_time(workspace_metadata["updated_at"]) || parse_time(workspace_metadata["created_at"])
+    end
+
+    def parse_time(value)
+      return nil if value.nil?
+      return value if value.is_a?(Time)
+
+      Time.iso8601(value.to_s)
+    rescue ArgumentError
+      nil
     end
 
     def stringify_keys(hash)

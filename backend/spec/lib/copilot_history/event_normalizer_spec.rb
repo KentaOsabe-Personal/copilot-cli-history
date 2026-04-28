@@ -105,7 +105,7 @@ RSpec.describe CopilotHistory::EventNormalizer do
             kind: :unknown,
             mapping_status: :complete,
             raw_type: "mystery-event",
-            occurred_at: nil,
+            occurred_at: "2026-04-26T09:00:03Z",
             role: nil,
             content: nil,
             tool_calls: [],
