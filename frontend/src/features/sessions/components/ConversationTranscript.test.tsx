@@ -103,18 +103,25 @@ describe('ConversationTranscript', () => {
     render(<ConversationTranscript conversation={conversation} stateScopeKey="session-1" />)
 
     const entry = screen.getByTestId('conversation-entry-7')
+    const toggleButton = screen.getByRole('button', { name: '発話 #7 を非表示' })
+    const controlledRegionId = toggleButton.getAttribute('aria-controls')
 
     expect(entry).toHaveTextContent('Visible body')
     expect(entry).toHaveTextContent('npm test')
     expect(entry).toHaveTextContent('skill-context')
     expect(entry).toHaveTextContent('message was incomplete')
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'true')
+    expect(controlledRegionId).not.toBeNull()
+    expect(document.getElementById(controlledRegionId!)).not.toBeNull()
 
-    await user.click(screen.getByRole('button', { name: '発話 #7 を非表示' }))
+    await user.click(toggleButton)
 
     expect(entry).toHaveTextContent('発話 #7')
     expect(entry).toHaveTextContent('assistant')
     expect(entry).toHaveTextContent('2026-04-26 18:01:00 JST')
     expect(entry).toHaveTextContent('partial')
+    expect(screen.getByRole('button', { name: '発話 #7 を表示' })).toHaveAttribute('aria-controls', controlledRegionId)
+    expect(screen.getByRole('button', { name: '発話 #7 を表示' })).toHaveAttribute('aria-expanded', 'false')
     expect(entry).not.toHaveTextContent('Visible body')
     expect(entry).not.toHaveTextContent('npm test')
     expect(entry).not.toHaveTextContent('skill-context')
@@ -126,6 +133,8 @@ describe('ConversationTranscript', () => {
     expect(entry).toHaveTextContent('npm test')
     expect(entry).toHaveTextContent('skill-context')
     expect(entry).toHaveTextContent('message was incomplete')
+    expect(screen.getByRole('button', { name: '発話 #7 を非表示' })).toHaveAttribute('aria-controls', controlledRegionId)
+    expect(screen.getByRole('button', { name: '発話 #7 を非表示' })).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('resets entry visibility when the scope changes to a different session with the same payload', async () => {

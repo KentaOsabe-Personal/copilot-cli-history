@@ -109,14 +109,27 @@ describe('TimelineContent', () => {
     )
 
     const toolBlock = screen.getByRole('group', { name: 'tool call functions.bash' })
+    const toggleButton = within(toolBlock).getByRole('button', { name: 'arguments を表示' })
+    const controlledRegionId = toggleButton.getAttribute('aria-controls')
 
     expect(within(toolBlock).queryByText('echo one\necho two')).not.toBeInTheDocument()
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'false')
+    expect(controlledRegionId).not.toBeNull()
+    expect(document.getElementById(controlledRegionId!)).not.toBeNull()
 
-    await user.click(within(toolBlock).getByRole('button', { name: 'arguments を表示' }))
+    await user.click(toggleButton)
 
     expect(toolBlock).toHaveTextContent(/echo one\s+echo two/)
     expect(within(toolBlock).getByText('functions.bash')).toBeInTheDocument()
     expect(within(toolBlock).getByText('ツール呼び出し')).toBeInTheDocument()
+    expect(within(toolBlock).getByRole('button', { name: 'arguments を隠す' })).toHaveAttribute(
+      'aria-controls',
+      controlledRegionId,
+    )
+    expect(within(toolBlock).getByRole('button', { name: 'arguments を隠す' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
   })
 
   it('resets disclosure state when the scope changes to a different session with the same payload', async () => {

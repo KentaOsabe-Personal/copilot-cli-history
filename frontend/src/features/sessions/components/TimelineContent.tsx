@@ -30,6 +30,7 @@ function TimelineContent({ event, stateScopeKey }: TimelineContentProps) {
         if (block.kind === 'tool_hint') {
           const toolName = block.name ?? 'unknown tool'
           const toolKey = `tool-${index}`
+          const argumentsContentId = `${stateScopeKey}-${toolKey}-arguments`
           const hasArgumentsPreview = block.argumentsPreview != null
           const isExpanded = expandedTools[toolKey] ?? !block.argumentsDefaultCollapsed
 
@@ -64,32 +65,35 @@ function TimelineContent({ event, stateScopeKey }: TimelineContentProps) {
                   <button
                     type="button"
                     className="rounded-full border border-cyan-200/30 bg-cyan-50/10 px-3 py-1 text-xs font-semibold text-cyan-50 transition hover:border-cyan-100/60 hover:bg-cyan-50/20"
-                     aria-expanded={isExpanded}
-                     onClick={() => {
-                       setToolDisclosureState((current) => {
-                         const currentTools =
-                           current.scopeKey === stateScopeKey ? current.expandedTools : {}
+                    aria-controls={argumentsContentId}
+                    aria-expanded={isExpanded}
+                    onClick={() => {
+                      setToolDisclosureState((current) => {
+                        const currentTools =
+                          current.scopeKey === stateScopeKey ? current.expandedTools : {}
 
-                         return {
-                           scopeKey: stateScopeKey,
-                           expandedTools: {
-                             ...currentTools,
-                             [toolKey]: !isExpanded,
-                           },
-                         }
-                       })
-                     }}
-                   >
+                        return {
+                          scopeKey: stateScopeKey,
+                          expandedTools: {
+                            ...currentTools,
+                            [toolKey]: !isExpanded,
+                          },
+                        }
+                      })
+                    }}
+                  >
                     {isExpanded ? 'arguments を隠す' : 'arguments を表示'}
                   </button>
                 ) : null}
               </div>
 
-              {hasArgumentsPreview && isExpanded ? (
-                <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-xl bg-slate-950/50 p-3 text-xs text-cyan-50">
-                  <code>{block.argumentsPreview}</code>
-                </pre>
-              ) : null}
+              <div id={argumentsContentId} hidden={!hasArgumentsPreview || !isExpanded}>
+                {hasArgumentsPreview && isExpanded ? (
+                  <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-xl bg-slate-950/50 p-3 text-xs text-cyan-50">
+                    <code>{block.argumentsPreview}</code>
+                  </pre>
+                ) : null}
+              </div>
             </section>
           )
         }

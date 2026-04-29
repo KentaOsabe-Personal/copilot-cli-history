@@ -47,6 +47,7 @@ function ConversationTranscript({ conversation, stateScopeKey }: ConversationTra
           {conversation.entries.map((entry) => {
             const content = formatConversationEntryContent(entry)
             const isVisible = visibleEntries[entry.sequence] ?? true
+            const entryContentId = `${stateScopeKey}-entry-${entry.sequence}-content`
             const roleCardClass =
               entry.role === 'assistant'
                 ? 'border-cyan-300/35 bg-cyan-950/25 shadow-cyan-950/20'
@@ -83,46 +84,49 @@ function ConversationTranscript({ conversation, stateScopeKey }: ConversationTra
                   <button
                     type="button"
                     className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-white/30 hover:bg-white/10"
-                     aria-expanded={isVisible}
-                     onClick={() => {
-                       setVisibilityState((current) => {
-                         const currentEntries =
-                           current.scopeKey === stateScopeKey ? current.visibleEntries : {}
+                    aria-controls={entryContentId}
+                    aria-expanded={isVisible}
+                    onClick={() => {
+                      setVisibilityState((current) => {
+                        const currentEntries =
+                          current.scopeKey === stateScopeKey ? current.visibleEntries : {}
 
-                         return {
-                           scopeKey: stateScopeKey,
-                           visibleEntries: {
-                             ...currentEntries,
-                             [entry.sequence]: !isVisible,
-                           },
-                         }
-                       })
-                     }}
-                   >
+                        return {
+                          scopeKey: stateScopeKey,
+                          visibleEntries: {
+                            ...currentEntries,
+                            [entry.sequence]: !isVisible,
+                          },
+                        }
+                      })
+                    }}
+                  >
                     {isVisible ? `発話 #${entry.sequence} を非表示` : `発話 #${entry.sequence} を表示`}
                   </button>
                 </div>
 
                 <p className="mt-3 text-sm text-slate-400">{formatTimestamp(content.occurredAt)}</p>
 
-                {isVisible ? (
-                  <>
-                    <div className="mt-4">
-                      <TimelineContent
-                        stateScopeKey={`${stateScopeKey}:entry:${entry.sequence}`}
-                        event={{
-                          content: entry.content,
-                          tool_calls: entry.tool_calls,
-                          detail: null,
-                        }}
-                      />
-                    </div>
+                <div id={entryContentId} hidden={!isVisible}>
+                  {isVisible ? (
+                    <>
+                      <div className="mt-4">
+                        <TimelineContent
+                          stateScopeKey={`${stateScopeKey}:entry:${entry.sequence}`}
+                          event={{
+                            content: entry.content,
+                            tool_calls: entry.tool_calls,
+                            detail: null,
+                          }}
+                        />
+                      </div>
 
-                    <div className="mt-4">
-                      <IssueList title="発話の issue" issues={content.issues} />
-                    </div>
-                  </>
-                ) : null}
+                      <div className="mt-4">
+                        <IssueList title="発話の issue" issues={content.issues} />
+                      </div>
+                    </>
+                  ) : null}
+                </div>
               </li>
             )
           })}
