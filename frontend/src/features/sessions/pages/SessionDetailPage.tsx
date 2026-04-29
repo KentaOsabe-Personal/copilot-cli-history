@@ -48,18 +48,22 @@ function SessionDetailPage() {
       ) : null}
 
       {state.status === 'success' ? (
-        <>
-          <SessionDetailHeader detail={state.detail} />
-          <IssueList title="セッションの issue" issues={state.detail.issues} />
-          <ConversationTranscript conversation={state.detail.conversation} />
-          <ActivityTimeline
-            activity={state.detail.activity}
-            rawIncluded={state.detail.raw_included}
-            rawStatus={state.rawStatus}
-            onRequestRaw={requestRaw}
-          />
-        </>
-      ) : null}
+          <>
+            <SessionDetailHeader detail={state.detail} />
+            <IssueList title="セッションの issue" issues={state.detail.issues} />
+            <ConversationTranscript
+              conversation={state.detail.conversation}
+              stateScopeKey={`session:${state.detail.id}:conversation`}
+            />
+            <ActivityTimeline
+              activity={state.detail.activity}
+              rawIncluded={state.detail.raw_included}
+              rawStatus={state.rawStatus}
+              onRequestRaw={requestRaw}
+              stateScopeKey={`session:${state.detail.id}`}
+            />
+          </>
+        ) : null}
     </section>
   )
 }

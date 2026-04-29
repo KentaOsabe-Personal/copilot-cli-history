@@ -79,6 +79,8 @@ describe('formatTimelineContent', () => {
           argumentsPreview: '{"command":"pwd"}',
           isTruncated: false,
           status: 'complete',
+          argumentsDefaultCollapsed: false,
+          collapseReason: 'none',
         },
       ],
     })
@@ -105,6 +107,8 @@ describe('formatTimelineContent', () => {
           argumentsPreview: '{"input":"y"}',
           isTruncated: true,
           status: 'partial',
+          argumentsDefaultCollapsed: true,
+          collapseReason: 'truncated_arguments',
         },
       ],
     })

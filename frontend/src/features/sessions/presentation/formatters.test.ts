@@ -13,8 +13,17 @@ describe('formatters', () => {
     expect(formatTimestamp(null)).toBe('時刻不明')
   })
 
-  it('formats ISO timestamps into a stable UTC label', () => {
-    expect(formatTimestamp('2026-04-26T09:05:00Z')).toBe('2026-04-26 09:05:00 UTC')
+  it('formats ISO timestamps into a stable JST label', () => {
+    expect(formatTimestamp('2026-04-26T09:05:00Z')).toBe('2026-04-26 18:05:00 JST')
+  })
+
+  it('formats JST midnight with a zero-based hour', () => {
+    expect(formatTimestamp('2026-04-26T15:05:00Z')).toBe('2026-04-27 00:05:00 JST')
+  })
+
+  it('keeps invalid timestamps out of the JST success format', () => {
+    expect(formatTimestamp('not-a-timestamp')).toBe('not-a-timestamp')
+    expect(formatTimestamp('not-a-timestamp')).not.toContain('JST')
   })
 
   it('formats missing work context and missing model with placeholders', () => {

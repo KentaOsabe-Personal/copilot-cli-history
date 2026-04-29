@@ -3,6 +3,19 @@ import type { SessionIssue, SessionSourceState, WorkContext } from '../api/sessi
 const MISSING_TIMESTAMP_LABEL = '時刻不明'
 const MISSING_WORK_CONTEXT_LABEL = '作業コンテキスト不明'
 const MISSING_MODEL_LABEL = 'モデル不明'
+const JST_TIME_ZONE = 'Asia/Tokyo'
+const JST_SUFFIX = 'JST'
+const JST_TIMESTAMP_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: JST_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+  hourCycle: 'h23',
+})
 
 const ISSUE_SEVERITY_LABELS: Record<string, string> = {
   error: 'エラー',
@@ -26,7 +39,11 @@ export function formatTimestamp(value: string | null): string {
     return value
   }
 
-  return timestamp.toISOString().replace('T', ' ').replace('.000Z', ' UTC')
+  const parts = JST_TIMESTAMP_FORMATTER.formatToParts(timestamp)
+
+  const partValues = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+
+  return `${partValues.year}-${partValues.month}-${partValues.day} ${partValues.hour}:${partValues.minute}:${partValues.second} ${JST_SUFFIX}`
 }
 
 export function formatWorkContext(workContext: WorkContext): string {

@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type {
   SessionApiClient,
@@ -44,6 +44,47 @@ function StateProbe({ client }: { client: SessionApiClient }) {
 function readState() {
   return JSON.parse(screen.getByTestId('state').textContent ?? 'null')
 }
+
+function buildIndexResponse(
+  data: SessionIndexResponse['data'] = [
+    {
+      id: 'session-b',
+      source_format: 'current',
+      created_at: '2026-04-26T10:00:00Z',
+      updated_at: '2026-04-26T10:05:00Z',
+      work_context: {
+        cwd: '/workspace/session-b',
+        git_root: '/workspace/session-b',
+        repository: 'octo/example',
+        branch: 'feature/b',
+      },
+      selected_model: 'gpt-5.4',
+      source_state: 'complete',
+      event_count: 3,
+      message_snapshot_count: 1,
+      conversation_summary: {
+        has_conversation: true,
+        message_count: 1,
+        preview: 'current transcript',
+        activity_count: 2,
+      },
+      degraded: false,
+      issues: [],
+    },
+  ],
+): SessionIndexResponse {
+  return {
+    data,
+    meta: {
+      count: data.length,
+      partial_results: false,
+    },
+  }
+}
+
+afterEach(() => {
+  cleanup()
+})
 
 describe('useSessionIndex', () => {
   it('starts in loading and transitions to success without reordering sessions', async () => {
@@ -192,5 +233,80 @@ describe('useSessionIndex', () => {
     unmount()
 
     expect(observedSignal?.aborted).toBe(true)
+  })
+
+  it('reuses the last successful index snapshot immediately for the same client on remount', async () => {
+    const firstPayload = buildIndexResponse()
+    const nextRequest = deferred<SessionApiResult<SessionIndexResponse>>()
+    const fetchSessionIndex = vi
+      .fn<SessionApiClient['fetchSessionIndex']>()
+      .mockResolvedValueOnce({ status: 'success', data: firstPayload })
+      .mockReturnValueOnce(nextRequest.promise)
+    const client = createClient(fetchSessionIndex)
+
+    const firstRender = render(<StateProbe client={client} />)
+
+    await waitFor(() =>
+      expect(readState()).toEqual({
+        status: 'success',
+        sessions: firstPayload.data,
+        meta: firstPayload.meta,
+      }),
+    )
+
+    firstRender.unmount()
+    render(<StateProbe client={client} />)
+
+    expect(readState()).toEqual({
+      status: 'success',
+      sessions: firstPayload.data,
+      meta: firstPayload.meta,
+    })
+    expect(fetchSessionIndex).toHaveBeenCalledTimes(2)
+  })
+
+  it('reuses the last empty index snapshot immediately but does not reuse errors', async () => {
+    const emptyPayload = buildIndexResponse([])
+    const errorPayload: SessionApiResult<SessionIndexResponse> = {
+      status: 'error',
+      error: {
+        kind: 'backend',
+        httpStatus: 503,
+        code: 'root_missing',
+        message: 'history root does not exist',
+        details: {
+          path: '/tmp/.copilot',
+        },
+      },
+    }
+    const pendingRequest = deferred<SessionApiResult<SessionIndexResponse>>()
+    const fetchEmptyIndex = vi
+      .fn<SessionApiClient['fetchSessionIndex']>()
+      .mockResolvedValueOnce({ status: 'success', data: emptyPayload })
+      .mockReturnValueOnce(pendingRequest.promise)
+    const emptyClient = createClient(fetchEmptyIndex)
+
+    const emptyRender = render(<StateProbe client={emptyClient} />)
+
+    await waitFor(() => expect(readState()).toEqual({ status: 'empty' }))
+    emptyRender.unmount()
+    render(<StateProbe client={emptyClient} />)
+
+    expect(readState()).toEqual({ status: 'empty' })
+
+    cleanup()
+
+    const fetchErrorIndex = vi
+      .fn<SessionApiClient['fetchSessionIndex']>()
+      .mockResolvedValueOnce(errorPayload)
+      .mockReturnValueOnce(pendingRequest.promise)
+    const errorClient = createClient(fetchErrorIndex)
+    const errorRender = render(<StateProbe client={errorClient} />)
+
+    await waitFor(() => expect(readState()).toEqual(errorPayload))
+    errorRender.unmount()
+    render(<StateProbe client={errorClient} />)
+
+    expect(readState()).toEqual({ status: 'loading' })
   })
 })

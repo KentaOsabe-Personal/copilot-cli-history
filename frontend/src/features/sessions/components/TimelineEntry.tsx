@@ -53,7 +53,7 @@ function TimelineEntry({ event }: TimelineEntryProps) {
       </dl>
 
       <div className="mt-4">
-        <TimelineContent event={event} />
+        <TimelineContent stateScopeKey={`timeline-entry:${event.sequence}`} event={event} />
       </div>
 
       <div className="mt-4">

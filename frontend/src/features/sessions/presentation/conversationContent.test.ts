@@ -51,6 +51,8 @@ describe('formatConversationEntryContent', () => {
           argumentsPreview: '{"command":"pwd"}',
           isTruncated: false,
           status: 'complete',
+          argumentsDefaultCollapsed: false,
+          collapseReason: 'none',
         },
       ],
     })
@@ -79,8 +81,100 @@ describe('formatConversationEntryContent', () => {
           argumentsPreview: null,
           isTruncated: true,
           status: 'partial',
+          argumentsDefaultCollapsed: true,
+          collapseReason: 'truncated_arguments',
         },
       ],
     })
+  })
+
+  it('collapses skill-context tool arguments by default without dropping tool metadata', () => {
+    expect(
+      formatConversationEntryContent(
+        buildEntry({
+          tool_calls: [
+            {
+              name: 'skill-context',
+              arguments_preview: '{"skill":"kiro-impl"}',
+              is_truncated: false,
+              status: 'complete',
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      blocks: [
+        expect.any(Object),
+        expect.any(Object),
+        expect.any(Object),
+        {
+          kind: 'tool_hint',
+          name: 'skill-context',
+          argumentsPreview: '{"skill":"kiro-impl"}',
+          isTruncated: false,
+          status: 'complete',
+          argumentsDefaultCollapsed: true,
+          collapseReason: 'skill_context',
+        },
+      ],
+    })
+  })
+
+  it('collapses multiline and truncated arguments while keeping short single-line arguments open', () => {
+    expect(
+      formatConversationEntryContent(
+        buildEntry({
+          content: '',
+          tool_calls: [
+            {
+              name: 'functions.exec_command',
+              arguments_preview: 'line 1\nline 2',
+              is_truncated: false,
+              status: 'complete',
+            },
+            {
+              name: 'functions.exec_command',
+              arguments_preview: '{"command":"long"}',
+              is_truncated: true,
+              status: 'partial',
+            },
+            {
+              name: 'functions.exec_command',
+              arguments_preview: '{"command":"pwd"}',
+              is_truncated: false,
+              status: 'complete',
+            },
+          ],
+        }),
+      ).blocks,
+    ).toEqual([
+      {
+        kind: 'tool_hint',
+        name: 'functions.exec_command',
+        argumentsPreview: 'line 1\nline 2',
+        isTruncated: false,
+        status: 'complete',
+        argumentsDefaultCollapsed: true,
+        collapseReason: 'multiline_arguments',
+      },
+      {
+        kind: 'tool_hint',
+        name: 'functions.exec_command',
+        argumentsPreview: '{"command":"long"}',
+        isTruncated: true,
+        status: 'partial',
+        argumentsDefaultCollapsed: true,
+        collapseReason: 'truncated_arguments',
+      },
+      {
+        kind: 'tool_hint',
+        name: 'functions.exec_command',
+        argumentsPreview: '{"command":"pwd"}',
+        isTruncated: false,
+        status: 'complete',
+        argumentsDefaultCollapsed: false,
+        collapseReason: 'none',
+      },
+    ])
   })
 })
