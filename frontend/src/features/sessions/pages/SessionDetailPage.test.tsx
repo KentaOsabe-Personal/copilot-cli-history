@@ -233,6 +233,8 @@ describe('SessionDetailPage', () => {
     expect(screen.getAllByText('session-123').length).toBeGreaterThan(0)
     expect(screen.getByRole('link', { name: 'セッション一覧へ戻る' })).toHaveAttribute('href', '/')
     expect(screen.getAllByText('一部欠損あり').length).toBeGreaterThan(0)
+    expect(screen.getByText('2026-04-26 18:05:00 JST')).toBeInTheDocument()
+    expect(screen.getByText('2026-04-26 18:00:02 JST')).toBeInTheDocument()
     expect(screen.getByText('session timeline is incomplete')).toBeInTheDocument()
     expect(screen.getAllByText('警告').length).toBeGreaterThan(0)
     expect(screen.getByText('セッション全体')).toBeInTheDocument()
@@ -247,6 +249,7 @@ describe('SessionDetailPage', () => {
     expect(screen.getAllByText('tool.execution_start').length).toBeGreaterThan(0)
     expect(screen.getByText('functions.bash / tool-1')).toBeInTheDocument()
     expect(screen.getByText('event payload is partial')).toBeInTheDocument()
+    expect(screen.getByText('2026-04-26 18:00:03 JST')).toBeInTheDocument()
   })
 
   it('keeps tool, code, partial, and unknown timeline events readable in sequence order', () => {

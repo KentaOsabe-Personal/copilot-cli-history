@@ -167,7 +167,7 @@ describe('SessionIndexPage', () => {
     expect(screen.getByText('4 件の会話')).toBeInTheDocument()
     expect(screen.getByText('7 件の内部 activity')).toBeInTheDocument()
     expect(screen.getByText('次の実装方針を相談したい')).toBeInTheDocument()
-    expect(screen.getByText('2026-04-26 10:05:00 UTC')).toBeInTheDocument()
+    expect(screen.getByText('2026-04-26 19:05:00 JST')).toBeInTheDocument()
     expect(screen.getByText('metadata-only')).toBeInTheDocument()
     expect(screen.getByText('workspace-only')).toBeInTheDocument()
     expect(screen.getByText('表示できる会話本文はありません')).toBeInTheDocument()
