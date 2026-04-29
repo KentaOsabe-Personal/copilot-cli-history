@@ -2,7 +2,7 @@ import type { SessionIssue } from '../api/sessionApi.types.ts'
 import { formatIssueMetadata } from '../presentation/formatters.ts'
 
 interface IssueListProps {
-  title: string
+  title?: string
   issues: readonly SessionIssue[]
 }
 
@@ -13,7 +13,7 @@ function IssueList({ title, issues }: IssueListProps) {
 
   return (
     <section className="rounded-3xl border border-amber-400/25 bg-amber-400/10 p-6 text-amber-50">
-      <h3 className="text-lg font-semibold text-amber-100">{title}</h3>
+      {title != null ? <h3 className="text-lg font-semibold text-amber-100">{title}</h3> : null}
       <ul className="mt-4 space-y-4">
         {issues.map((issue, index) => {
           const metadata = formatIssueMetadata(issue)

@@ -68,15 +68,15 @@
   - _Requirements: 2.2, 2.3, 2.4, 2.5, 3.2, 3.4, 4.5_
   - _Boundary: SessionDetailHeader_
 
-- [ ] 5. 詳細画面を conversation-first の折りたたみ表示へ組み替える
-- [ ] 5.1 session issue と activity の共通 disclosure を用意する
+- [x] 5. 詳細画面を conversation-first の折りたたみ表示へ組み替える
+- [x] 5.1 session issue と activity の共通 disclosure を用意する
   - 初期状態は collapsed とし、見出しには件数と警告状態を表示する
   - 展開時だけ body を描画し、開閉状態は component lifetime の local state に閉じる
   - 完了時には session issue と activity が会話本文の前に展開表示されず、存在だけは必要時に確認できる
   - _Requirements: 4.1, 4.2, 6.1, 6.2_
   - _Boundary: DisclosureSection_
 
-- [ ] 5.2 (P) tool block を本文と区別しつつ arguments を初期折りたたみにする
+- [x] 5.2 (P) tool block を本文と区別しつつ arguments を初期折りたたみにする
   - collapsed 状態でも tool 名、partial / truncated の状態、展開操作を本文とは別の block として表示する
   - 展開後は tool 名と補助情報を同じ block 内で読み取れるようにする
   - 完了時には skill-context を含む tool arguments が初期表示で展開されず、明示操作でだけ詳細を確認できる
@@ -84,7 +84,7 @@
   - _Requirements: 5.1, 5.2, 5.3, 5.4_
   - _Boundary: TimelineContent_
 
-- [ ] 5.3 会話 transcript で tool-only 発話と発話近傍 issue を読める状態にする
+- [x] 5.3 会話 transcript で tool-only 発話と発話近傍 issue を読める状態にする
   - content が空で tool call だけを持つ発話では、空本文 placeholder を増やさず tool block と発話 metadata を表示する
   - 発話単位の issue は本文と tool block の近くに表示し、tool arguments の collapsed 状態で完全に隠れないようにする
   - 完了時には会話 entry が表示されている限り、その entry の issue と tool の存在を同じ発話内で確認できる
@@ -92,7 +92,7 @@
   - _Requirements: 4.3, 4.4, 5.5_
   - _Boundary: ConversationTranscript_
 
-- [ ] 5.4 詳細 page の初期表示順を会話本文優先にする
+- [x] 5.4 詳細 page の初期表示順を会話本文優先にする
   - 会話本文を session issue disclosure より先に描画し、session issue は collapsed summary として後続配置にする
   - activity がある場合だけ collapsed summary を表示し、ない場合は空 section を表示しない
   - activity 展開時には内容、時刻、状態、issue、既存 raw action を会話本文と区別して確認できる
