@@ -101,32 +101,32 @@
   - _Requirements: 4.1, 4.2, 4.4, 4.5, 6.1, 6.2, 6.3, 6.4, 6.5_
   - _Boundary: SessionDetailPage, ActivityTimeline_
 
-- [ ] 6. backend / frontend の回帰テストで表示契約を固定する
-- [ ] 6.1 backend reader と projector の単体テストを追加する
+- [x] 6. backend / frontend の回帰テストで表示契約を固定する
+- [x] 6.1 backend reader と projector の単体テストを追加する
   - current model の優先候補、欠損、空値、非文字列値の扱いを検証する
   - tool-only message が会話 entry に残り、空 message は除外されることを検証する
   - 完了時には backend の正規化層だけでモデル抽出と tool-only 会話投影の境界条件を再現できる
   - _Requirements: 3.1, 3.3, 3.5, 4.3, 5.2, 5.4, 5.5_
 
-- [ ] 6.2 backend request と presenter の結合テストを追加する
+- [x] 6.2 backend request と presenter の結合テストを追加する
   - index と detail が current session の selected model を既存 field で返すことを検証する
   - model がない current session は null のままで、推測値を返さないことを検証する
   - 完了時には API response shape を変更せず、一覧と詳細の表示に必要な値だけが返ることを request spec で確認できる
   - _Requirements: 3.1, 3.2, 3.3, 3.5, 4.3, 5.2_
 
-- [ ] 6.3 frontend の一覧と詳細 header の表示テストを追加する
+- [x] 6.3 frontend の一覧と詳細 header の表示テストを追加する
   - 通常 session に会話あり、正常、complete、内部 activity 数の主要表示が出ないことを検証する
   - work context と model の不明 placeholder が表示されず、実値だけが metadata として表示されることを検証する
   - 完了時には current / legacy の通常 session と例外 session の一覧表示差分を UI テストで固定できる
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.5, 3.2, 3.4_
 
-- [ ] 6.4 frontend の会話、tool、issue、activity disclosure の表示テストを追加する
+- [x] 6.4 frontend の会話、tool、issue、activity disclosure の表示テストを追加する
   - 詳細初期表示で会話が session issue より先に読め、session issue と activity は明示操作で展開できることを検証する
   - tool arguments は初期 collapsed で、展開後に tool 名と補助情報を同じ block 内で読めることを検証する
   - 完了時には tool arguments が collapsed のままでも発話近傍 issue が表示され、activity の内容・時刻・状態・issue も展開後に確認できる
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 5.1, 5.2, 5.3, 5.4, 5.5, 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 6.5 read-only 境界と既存品質コマンドで最終確認する
+- [x] 6.5 read-only 境界と既存品質コマンドで最終確認する
   - backend と frontend の既存 test / lint / build 導線を実行し、追加した contract が破綻していないことを確認する
   - UI に編集、削除、送信、共有、専用 raw viewer、折りたたみ永続化の新規操作が増えていないことを確認する
   - 完了時には既存品質コマンドが成功し、仕様範囲外の操作追加なしで会話優先表示を検証済みにできる

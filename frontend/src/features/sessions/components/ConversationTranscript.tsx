@@ -1,7 +1,10 @@
 import { useState } from 'react'
 
 import type { SessionConversation } from '../api/sessionApi.types.ts'
-import { formatConversationEntryContent } from '../presentation/conversationContent.ts'
+import {
+  formatConversationEntryContent,
+  shouldDefaultHideConversationEntryContent,
+} from '../presentation/conversationContent.ts'
 import { formatTimestamp } from '../presentation/formatters.ts'
 import IssueList from './IssueList.tsx'
 import TimelineContent from './TimelineContent.tsx'
@@ -46,7 +49,9 @@ function ConversationTranscript({ conversation, stateScopeKey }: ConversationTra
         <ol className="space-y-4">
           {conversation.entries.map((entry) => {
             const content = formatConversationEntryContent(entry)
-            const isVisible = visibleEntries[entry.sequence] ?? true
+            const isVisible =
+              visibleEntries[entry.sequence] ??
+              !shouldDefaultHideConversationEntryContent(entry.content)
             const entryContentId = `${stateScopeKey}-entry-${entry.sequence}-content`
             const roleCardClass =
               entry.role === 'assistant'

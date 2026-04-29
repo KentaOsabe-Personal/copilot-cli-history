@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import type { SessionConversationEntry } from '../api/sessionApi.types.ts'
-import { formatConversationEntryContent } from './conversationContent.ts'
+import {
+  formatConversationEntryContent,
+  shouldDefaultHideConversationEntryContent,
+} from './conversationContent.ts'
 
 function buildEntry(overrides: Partial<SessionConversationEntry> = {}): SessionConversationEntry {
   return {
@@ -191,5 +194,23 @@ describe('formatConversationEntryContent', () => {
         collapseReason: 'none',
       },
     ])
+  })
+})
+
+describe('shouldDefaultHideConversationEntryContent', () => {
+  it('returns true when the entry starts with a skill-context tag', () => {
+    expect(
+      shouldDefaultHideConversationEntryContent(
+        '  <skill-context name="kiro-debug">\ncontext body\n</skill-context>',
+      ),
+    ).toBe(true)
+  })
+
+  it('returns false for regular message content and tool-only entries', () => {
+    expect(shouldDefaultHideConversationEntryContent('I will inspect the current session.')).toBe(
+      false,
+    )
+    expect(shouldDefaultHideConversationEntryContent('')).toBe(false)
+    expect(shouldDefaultHideConversationEntryContent(null)).toBe(false)
   })
 })
