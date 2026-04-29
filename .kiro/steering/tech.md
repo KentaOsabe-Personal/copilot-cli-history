@@ -1,6 +1,6 @@
 # 技術スタック
 
-updated_at: 2026-04-27
+updated_at: 2026-04-29
 
 ## アーキテクチャ
 
@@ -9,7 +9,7 @@ updated_at: 2026-04-27
 
 ## コア技術
 
-- **Frontend**: React 19 / TypeScript 6 / Vite / Vitest / Tailwind CSS 4
+- **Frontend**: React 19 / React Router 7 / TypeScript 6 / Vite / Vitest / Tailwind CSS 4
 - **Backend**: Ruby 4 / Rails 8.1 API mode / RSpec
 - **Database**: MySQL 9.7
 - **Runtime / Dev Env**: Docker Compose をローカル開発の正本とする
@@ -18,6 +18,7 @@ updated_at: 2026-04-27
 
 - **Vite**: フロントエンドの高速な開発サーバーとビルド
 - **Vitest + Testing Library**: UI の振る舞いをテストで確認する
+- **React Router**: 一覧と詳細を SPA 内で切り替える read-only 導線を保つ
 - **Tailwind CSS**: 画面試作と UI 実装を素早く進める
 - **RSpec Rails**: バックエンドの API / lib / request spec を支える
 - **Rack CORS**: SPA と Rails API の分離を保ったままローカル接続を許可する
@@ -39,6 +40,7 @@ updated_at: 2026-04-27
 ### テスト
 
 - フロントエンドは `pnpm test` で Vitest を実行する
+- フロントエンドの検証は component / hook / presentation utility を小さく分けて行う
 - バックエンドは `bundle exec rspec` を使い、`spec/requests` や `spec/lib` を軸に確認する
 - ローカル実行は Docker Compose 経由を標準にし、環境差分を減らす
 
@@ -49,6 +51,7 @@ updated_at: 2026-04-27
 - Docker / Docker Compose
 - Node.js 系ツールはコンテナ内の pnpm を前提に扱う
 - Ruby / Bundler もコンテナ内実行を基本にする
+- Copilot CLI 履歴は backend コンテナへ read-only mount して扱う
 
 ### 共通コマンド
 
@@ -101,6 +104,11 @@ UI や controller で format 分岐を増やすより、`copilot_history` 配下
 
 履歴ルートが読めないときは共通 error envelope で失敗を返し、個別セッションの破損は degraded と issue 一覧に閉じ込めます。  
 「全部失敗」か「一部だけ壊れているか」を API 契約で区別するのが前提です。
+
+### 7. API 接続先は明示設定に限定する
+
+frontend は `VITE_API_BASE_URL` を必須の絶対 URL として扱います。  
+暗黙の相対パスに頼らず、SPA と Rails API の接続先を環境変数で明示する前提です。
 
 ---
 _依存関係の一覧ではなく、開発判断に効く技術上の前提と標準を残す_
