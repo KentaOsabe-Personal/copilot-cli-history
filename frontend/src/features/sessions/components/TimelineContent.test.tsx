@@ -132,6 +132,33 @@ describe('TimelineContent', () => {
     )
   })
 
+  it('starts short single-line arguments collapsed until the user expands them', () => {
+    render(
+      <TimelineContent
+        stateScopeKey="session-1:event-1"
+        event={buildEvent({
+          content: null,
+          tool_calls: [
+            {
+              name: 'functions.bash',
+              arguments_preview: '{"command":"pwd"}',
+              is_truncated: false,
+              status: 'complete',
+            },
+          ],
+        })}
+      />,
+    )
+
+    const toolBlock = screen.getByRole('group', { name: 'tool call functions.bash' })
+
+    expect(within(toolBlock).getByRole('button', { name: 'arguments を表示' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+    expect(toolBlock).not.toHaveTextContent('{"command":"pwd"}')
+  })
+
   it('resets disclosure state when the scope changes to a different session with the same payload', async () => {
     const user = userEvent.setup()
     const event = buildEvent({

@@ -235,9 +235,6 @@ describe('SessionDetailPage', () => {
     expect(screen.getAllByText('一部欠損あり').length).toBeGreaterThan(0)
     expect(screen.getByText('2026-04-26 18:05:00 JST')).toBeInTheDocument()
     expect(screen.getByText('2026-04-26 18:00:02 JST')).toBeInTheDocument()
-    expect(screen.getByText('session timeline is incomplete')).toBeInTheDocument()
-    expect(screen.getAllByText('警告').length).toBeGreaterThan(0)
-    expect(screen.getByText('セッション全体')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '会話' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '内部 activity' })).toBeInTheDocument()
     expect(screen.getByText('assistant')).toBeInTheDocument()
@@ -245,14 +242,38 @@ describe('SessionDetailPage', () => {
     expect(screen.getByText('説明です')).toBeInTheDocument()
     expect(screen.getByText('const answer = 42')).toBeInTheDocument()
     expect(screen.getByText('functions.bash')).toBeInTheDocument()
-    expect(screen.getAllByText('詳細イベント').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('tool.execution_start').length).toBeGreaterThan(0)
-    expect(screen.getByText('functions.bash / tool-1')).toBeInTheDocument()
-    expect(screen.getByText('event payload is partial')).toBeInTheDocument()
-    expect(screen.getByText('2026-04-26 18:00:03 JST')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'セッションの issue を表示' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '内部 activity を表示' })).toBeInTheDocument()
+    expect(screen.queryByText('session timeline is incomplete')).not.toBeInTheDocument()
+    expect(screen.queryByText('functions.bash / tool-1')).not.toBeInTheDocument()
   })
 
-  it('keeps tool, code, partial, and unknown timeline events readable in sequence order', () => {
+  it('omits placeholder-only work context and model metadata from the detail header', () => {
+    mockedUseSessionDetail.mockReturnValue({
+      state: {
+        status: 'success',
+        sessionId: 'session-123',
+        rawStatus: 'idle',
+        detail: buildDetail({
+          work_context: {
+            cwd: null,
+            git_root: null,
+            repository: null,
+            branch: null,
+          },
+          selected_model: null,
+        }),
+      },
+      requestRaw,
+    })
+
+    renderDetailPage()
+
+    expect(screen.queryByText('作業コンテキスト不明')).not.toBeInTheDocument()
+    expect(screen.queryByText('モデル不明')).not.toBeInTheDocument()
+  })
+
+  it('keeps tool, code, partial, and unknown timeline events readable in sequence order', async () => {
     mockedUseSessionDetail.mockReturnValue({
       state: {
         status: 'success',
@@ -265,9 +286,15 @@ describe('SessionDetailPage', () => {
 
     renderDetailPage()
 
+    const user = userEvent.setup()
     const activitySection = screen.getByRole('heading', { name: '内部 activity' }).closest('section')
 
     expect(activitySection).not.toBeNull()
+    expect(within(activitySection as HTMLElement).queryByRole('heading', { level: 4 })).not.toBeInTheDocument()
+    expect(screen.queryByText('functions.bash / tool-1')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '内部 activity を表示' }))
+
     expect(
       within(activitySection as HTMLElement).getAllByRole('heading', { level: 4 }).map((node) => node.textContent),
     ).toEqual([
@@ -345,10 +372,11 @@ describe('SessionDetailPage', () => {
     renderDetailPage('/sessions/legacy-session-123')
 
     expect(screen.getAllByText('legacy-session-123').length).toBeGreaterThan(0)
-    expect(screen.getByText('正常')).toBeInTheDocument()
     expect(screen.getByText('assistant')).toBeInTheDocument()
     expect(screen.getByText('legacy transcript remains readable')).toBeInTheDocument()
     expect(screen.queryByText('partial')).not.toBeInTheDocument()
+    expect(screen.queryByText('正常')).not.toBeInTheDocument()
+    expect(screen.queryByText('workspace-only')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'セッションの issue' })).not.toBeInTheDocument()
   })
 
@@ -409,10 +437,11 @@ describe('SessionDetailPage', () => {
     expect(screen.getByText('entry body missing')).toBeInTheDocument()
     expect(screen.getByText('follow-up question still visible')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '内部 activity' })).toBeInTheDocument()
-    expect(screen.getByText('functions.bash / tool-1')).toBeInTheDocument()
   })
 
-  it('preserves conversation, activity, degraded, and issue metadata for legacy detail responses too', () => {
+  it('preserves conversation, activity, degraded, and issue metadata for legacy detail responses too', async () => {
+    const user = userEvent.setup()
+
     mockedUseSessionDetail.mockReturnValue({
       state: {
         status: 'success',
@@ -499,9 +528,13 @@ describe('SessionDetailPage', () => {
 
     expect(screen.getAllByText('legacy-session-456').length).toBeGreaterThan(0)
     expect(screen.getAllByText('一部欠損あり').length).toBeGreaterThan(0)
-    expect(screen.getByText('legacy history is incomplete')).toBeInTheDocument()
     expect(screen.getByText('legacy transcript remains readable')).toBeInTheDocument()
     expect(screen.getByText('legacy assistant message is partial')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'セッションの issue を表示' }))
+    await user.click(screen.getByRole('button', { name: '内部 activity を表示' }))
+
+    expect(screen.getByText('legacy history is incomplete')).toBeInTheDocument()
     expect(screen.getByText('legacy tool execution stays readable')).toBeInTheDocument()
     expect(screen.getByText('legacy activity is partial')).toBeInTheDocument()
     expect(screen.getByText('2026-04-26 17:59:02 JST')).toBeInTheDocument()
@@ -594,6 +627,9 @@ describe('SessionDetailPage', () => {
 
     renderDetailPage()
 
+    expect(screen.queryByRole('button', { name: 'Raw を取得' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '内部 activity を表示' }))
     await user.click(screen.getByRole('button', { name: 'Raw を取得' }))
 
     expect(requestRaw).toHaveBeenCalledTimes(1)
@@ -612,7 +648,41 @@ describe('SessionDetailPage', () => {
 
     renderDetailPage()
 
+    expect(screen.getByRole('button', { name: '内部 activity を表示' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '内部 activity を表示' }))
     expect(screen.getByText('raw included')).toBeInTheDocument()
+  })
+
+  it('renders disclosures after the conversation and expands session issues only on demand', async () => {
+    const user = userEvent.setup()
+
+    mockedUseSessionDetail.mockReturnValue({
+      state: {
+        status: 'success',
+        sessionId: 'session-123',
+        rawStatus: 'idle',
+        detail: buildDetail(),
+      },
+      requestRaw,
+    })
+
+    renderDetailPage()
+
+    const conversationHeading = screen.getByRole('heading', { name: '会話' })
+    const sessionIssueHeading = screen.getByRole('heading', { name: 'セッションの issue' })
+    const activityHeading = screen.getByRole('heading', { name: '内部 activity' })
+
+    expect(conversationHeading.compareDocumentPosition(sessionIssueHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(sessionIssueHeading.compareDocumentPosition(activityHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByText('session timeline is incomplete')).not.toBeInTheDocument()
+    expect(screen.queryByText('セッション全体')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'セッションの issue を表示' }))
+
+    expect(screen.getByText('session timeline is incomplete')).toBeInTheDocument()
+    expect(screen.getAllByText('警告').length).toBeGreaterThan(0)
+    expect(screen.getByText('セッション全体')).toBeInTheDocument()
   })
 
   it('keeps the detail page read-only without edit, delete, send, share, timezone, or dedicated raw-viewer controls', () => {

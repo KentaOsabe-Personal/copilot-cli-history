@@ -359,6 +359,90 @@ RSpec.describe CopilotHistory::Api::Presenters::SessionDetailPresenter do
       )
     end
 
+    it "keeps tool-only conversation entries and their utterance issues in the existing detail schema" do
+      utterance_issue = CopilotHistory::Types::ReadIssue.new(
+        code: CopilotHistory::Errors::ReadErrorCode::EVENT_PARTIAL_MAPPING,
+        message: "event payload matched partially",
+        source_path: "/tmp/copilot/session-state/current-model-with-values/events.jsonl",
+        sequence: 1,
+        severity: :warning
+      )
+      result = CopilotHistory::Api::Types::SessionLookupResult::Found.new(
+        root: build_root,
+        session: CopilotHistory::Types::NormalizedSession.new(
+          session_id: "current-model-with-values",
+          source_format: :current,
+          created_at: "2026-04-29T00:00:00Z",
+          updated_at: "2026-04-29T00:00:02Z",
+          selected_model: "gpt-5-current",
+          events: [
+            build_event(
+              sequence: 1,
+              raw_type: "assistant.message",
+              occurred_at: "2026-04-29T00:00:01Z",
+              role: "assistant",
+              content: nil,
+              tool_calls: [
+                CopilotHistory::Types::NormalizedToolCall.new(
+                  name: "skill-context",
+                  arguments_preview: "{\"context\":\"trimmed\"}",
+                  is_truncated: false,
+                  status: :complete
+                )
+              ]
+            )
+          ],
+          message_snapshots: [],
+          issues: [ utterance_issue ],
+          source_paths: {
+            workspace: "/tmp/copilot/session-state/current-model-with-values/workspace.yaml",
+            events: "/tmp/copilot/session-state/current-model-with-values/events.jsonl"
+          }
+        )
+      )
+
+      payload = presenter.call(result: result).fetch(:data)
+
+      expect(payload.fetch(:selected_model)).to eq("gpt-5-current")
+      expect(payload.fetch(:conversation)).to eq(
+        entries: [
+          {
+            sequence: 1,
+            role: "assistant",
+            content: "",
+            occurred_at: "2026-04-29T00:00:01Z",
+            tool_calls: [
+              {
+                name: "skill-context",
+                arguments_preview: "{\"context\":\"trimmed\"}",
+                is_truncated: false,
+                status: "complete"
+              }
+            ],
+            degraded: true,
+            issues: [
+              {
+                code: "event.partial_mapping",
+                severity: "warning",
+                message: "event payload matched partially",
+                source_path: "/tmp/copilot/session-state/current-model-with-values/events.jsonl",
+                scope: "event",
+                event_sequence: 1
+              }
+            ]
+          }
+        ],
+        message_count: 1,
+        empty_reason: nil,
+        summary: {
+          has_conversation: true,
+          message_count: 1,
+          preview: nil,
+          activity_count: 0
+        }
+      )
+    end
+
     it "includes raw payloads only when explicitly requested" do
       result = CopilotHistory::Api::Types::SessionLookupResult::Found.new(
         root: build_root,

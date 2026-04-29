@@ -137,6 +137,88 @@ describe('ConversationTranscript', () => {
     expect(screen.getByRole('button', { name: '発話 #7 を非表示' })).toHaveAttribute('aria-expanded', 'true')
   })
 
+  it('renders tool-only entries without adding an empty-body placeholder and keeps entry issues visible', () => {
+    const conversation: SessionConversation = {
+      ...buildConversation(),
+      entries: [
+        {
+          sequence: 9,
+          role: 'assistant',
+          content: '',
+          occurred_at: '2026-04-26T09:02:00Z',
+          tool_calls: [
+            {
+              name: 'skill-context',
+              arguments_preview: 'long\ncontext',
+              is_truncated: true,
+              status: 'partial',
+            },
+          ],
+          degraded: false,
+          issues: [
+            {
+              code: 'tool.partial',
+              severity: 'warning',
+              message: 'tool context was truncated',
+              source_path: null,
+              scope: 'event',
+              event_sequence: 9,
+            },
+          ],
+        },
+      ],
+      message_count: 1,
+    }
+
+    render(<ConversationTranscript conversation={conversation} stateScopeKey="session-1" />)
+
+    const entry = screen.getByTestId('conversation-entry-9')
+
+    expect(entry).toHaveTextContent('skill-context')
+    expect(entry).toHaveTextContent('tool context was truncated')
+    expect(entry).not.toHaveTextContent('表示できる会話本文はありません')
+  })
+
+  it('starts entries that begin with a skill-context tag hidden by default', async () => {
+    const user = userEvent.setup()
+    const conversation: SessionConversation = {
+      ...buildConversation(),
+      entries: [
+        {
+          sequence: 11,
+          role: 'assistant',
+          content:
+            '<skill-context name="kiro-debug">\nlong hidden context\n</skill-context>\nVisible after expand',
+          occurred_at: '2026-04-26T09:03:00Z',
+          tool_calls: [],
+          degraded: false,
+          issues: [],
+        },
+      ],
+      message_count: 1,
+    }
+
+    render(<ConversationTranscript conversation={conversation} stateScopeKey="session-1" />)
+
+    const entry = screen.getByTestId('conversation-entry-11')
+    const toggleButton = screen.getByRole('button', { name: '発話 #11 を表示' })
+
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'false')
+    expect(entry).toHaveTextContent('発話 #11')
+    expect(entry).toHaveTextContent('assistant')
+    expect(entry).not.toHaveTextContent('long hidden context')
+    expect(entry).not.toHaveTextContent('Visible after expand')
+
+    await user.click(toggleButton)
+
+    expect(screen.getByRole('button', { name: '発話 #11 を非表示' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(entry).toHaveTextContent('long hidden context')
+    expect(entry).toHaveTextContent('Visible after expand')
+  })
+
   it('resets entry visibility when the scope changes to a different session with the same payload', async () => {
     const user = userEvent.setup()
     const conversation = buildConversation()

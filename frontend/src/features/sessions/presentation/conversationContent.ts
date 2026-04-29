@@ -21,6 +21,7 @@ export type ToolCollapseReason =
   | 'skill_context'
   | 'multiline_arguments'
   | 'truncated_arguments'
+  | 'arguments_preview'
   | 'none'
 
 export interface ConversationEntryContentModel {
@@ -33,6 +34,7 @@ export interface ConversationEntryContentModel {
 }
 
 const CODE_FENCE_PATTERN = /```([^\n`]*)\n?([\s\S]*?)```/g
+const SKILL_CONTEXT_PREFIX = '<skill-context'
 
 export function formatConversationEntryContent(
   entry: SessionConversationEntry,
@@ -94,6 +96,14 @@ export function extractToolHintBlocks(
   })
 }
 
+export function shouldDefaultHideConversationEntryContent(content: string | null): boolean {
+  if (content == null) {
+    return false
+  }
+
+  return content.trimStart().startsWith(SKILL_CONTEXT_PREFIX)
+}
+
 function resolveToolCollapseReason(toolCall: SessionTimelineToolCall): ToolCollapseReason {
   if (toolCall.name === 'skill-context') {
     return 'skill_context'
@@ -103,11 +113,15 @@ function resolveToolCollapseReason(toolCall: SessionTimelineToolCall): ToolColla
     return 'truncated_arguments'
   }
 
+  if (toolCall.arguments_preview == null) {
+    return 'none'
+  }
+
   if (toolCall.arguments_preview?.includes('\n') === true) {
     return 'multiline_arguments'
   }
 
-  return 'none'
+  return 'arguments_preview'
 }
 
 function pushTextBlock(blocks: ConversationVisualBlock[], text: string) {

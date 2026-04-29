@@ -2,11 +2,8 @@ import { Link } from 'react-router'
 
 import type { SessionSummary } from '../api/sessionApi.types.ts'
 import {
-  formatDegradedLabel,
-  formatModel,
-  formatSourceStateLabel,
-  formatTimestamp,
-  formatWorkContext,
+  buildSessionMetadataItems,
+  buildSessionSummarySignals,
 } from '../presentation/formatters.ts'
 
 interface SessionSummaryCardProps {
@@ -14,9 +11,16 @@ interface SessionSummaryCardProps {
 }
 
 function SessionSummaryCard({ session }: SessionSummaryCardProps) {
-  const conversationLabel = session.conversation_summary.has_conversation
-    ? '会話あり'
-    : 'metadata-only'
+  const metadataItems = buildSessionMetadataItems({
+    updatedAt: session.updated_at,
+    workContext: session.work_context,
+    selectedModel: session.selected_model,
+  })
+  const signals = buildSessionSummarySignals({
+    hasConversation: session.conversation_summary.has_conversation,
+    degraded: session.degraded,
+    sourceState: session.source_state,
+  })
 
   return (
     <article className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-slate-950/20">
@@ -24,27 +28,18 @@ function SessionSummaryCard({ session }: SessionSummaryCardProps) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="font-mono text-lg font-semibold text-cyan-200">{session.id}</h3>
-            <span
-              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                session.conversation_summary.has_conversation
-                  ? 'bg-cyan-400/15 text-cyan-100 ring-1 ring-cyan-300/20'
-                  : 'bg-slate-700 text-slate-100 ring-1 ring-slate-600'
-              }`}
-            >
-              {conversationLabel}
-            </span>
-            <span
-              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                session.degraded
-                  ? 'bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/25'
-                  : 'bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-300/20'
-              }`}
-            >
-              {formatDegradedLabel(session.degraded)}
-            </span>
-            <span className="inline-flex rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-200 ring-1 ring-slate-700">
-              {formatSourceStateLabel(session.source_state)}
-            </span>
+            {signals.map((signal) => (
+              <span
+                key={signal.label}
+                className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                  signal.tone === 'warning'
+                    ? 'bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/25'
+                    : 'bg-slate-700 text-slate-100 ring-1 ring-slate-600'
+                }`}
+              >
+                {signal.label}
+              </span>
+            ))}
           </div>
 
           <div className="mt-4 rounded-2xl border border-slate-700/70 bg-slate-950/30 p-4">
@@ -55,32 +50,21 @@ function SessionSummaryCard({ session }: SessionSummaryCardProps) {
               <span className="rounded-full bg-slate-800 px-2.5 py-1">
                 {`${session.conversation_summary.message_count} 件の会話`}
               </span>
-              <span className="rounded-full bg-slate-800 px-2.5 py-1">
-                {`${session.conversation_summary.activity_count} 件の内部 activity`}
-              </span>
             </div>
           </div>
 
-          <dl className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
-            <div>
-              <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                更新日時
-              </dt>
-              <dd className="mt-1">{formatTimestamp(session.updated_at)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                作業コンテキスト
-              </dt>
-              <dd className="mt-1">{formatWorkContext(session.work_context)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                モデル
-              </dt>
-              <dd className="mt-1">{formatModel(session.selected_model)}</dd>
-            </div>
-          </dl>
+          {metadataItems.length > 0 ? (
+            <dl className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
+              {metadataItems.map((item) => (
+                <div key={item.label}>
+                  <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    {item.label}
+                  </dt>
+                  <dd className="mt-1">{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
         </div>
 
         <div className="shrink-0">

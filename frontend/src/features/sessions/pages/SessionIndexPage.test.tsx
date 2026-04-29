@@ -75,7 +75,7 @@ describe('SessionIndexPage', () => {
     expect(screen.getByText('表示できるセッションはありません。')).toBeInTheDocument()
   })
 
-  it('renders ordered session cards with degraded state and placeholder metadata', () => {
+  it('renders ordered session cards without placeholder-only work context or model metadata', () => {
     mockedUseSessionIndex.mockReturnValue({
       state: {
         status: 'success',
@@ -116,15 +116,15 @@ describe('SessionIndexPage', () => {
     ])
     expect(screen.getAllByText('一部欠損あり')).toHaveLength(1)
     expect(screen.getByText('時刻不明')).toBeInTheDocument()
-    expect(screen.getByText('作業コンテキスト不明')).toBeInTheDocument()
-    expect(screen.getByText('モデル不明')).toBeInTheDocument()
+    expect(screen.queryByText('作業コンテキスト不明')).not.toBeInTheDocument()
+    expect(screen.queryByText('モデル不明')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'session-b を開く' })).toHaveAttribute(
       'href',
       '/sessions/session-b',
     )
   })
 
-  it('shows conversation summary, preview, source state, and corrected updated time on cards', () => {
+  it('keeps normal sessions free of always-on status badges while surfacing exceptional states', () => {
     mockedUseSessionIndex.mockReturnValue({
       state: {
         status: 'success',
@@ -140,6 +140,15 @@ describe('SessionIndexPage', () => {
             },
           }),
           buildSessionSummary({
+            id: 'metadata-only-session',
+            conversation_summary: {
+              has_conversation: false,
+              message_count: 0,
+              preview: null,
+              activity_count: 0,
+            },
+          }),
+          buildSessionSummary({
             id: 'workspace-only-session',
             source_state: 'workspace_only',
             conversation_summary: {
@@ -151,7 +160,7 @@ describe('SessionIndexPage', () => {
           }),
         ],
         meta: {
-          count: 2,
+          count: 3,
           partial_results: false,
         },
       },
@@ -163,14 +172,16 @@ describe('SessionIndexPage', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('会話あり')).toBeInTheDocument()
     expect(screen.getByText('4 件の会話')).toBeInTheDocument()
-    expect(screen.getByText('7 件の内部 activity')).toBeInTheDocument()
     expect(screen.getByText('次の実装方針を相談したい')).toBeInTheDocument()
     expect(screen.getByText('2026-04-26 19:05:00 JST')).toBeInTheDocument()
+    expect(screen.queryByText('会話あり')).not.toBeInTheDocument()
+    expect(screen.queryByText('正常')).not.toBeInTheDocument()
+    expect(screen.queryByText('complete')).not.toBeInTheDocument()
+    expect(screen.queryByText('7 件の内部 activity')).not.toBeInTheDocument()
     expect(screen.getByText('metadata-only')).toBeInTheDocument()
     expect(screen.getByText('workspace-only')).toBeInTheDocument()
-    expect(screen.getByText('表示できる会話本文はありません')).toBeInTheDocument()
+    expect(screen.getAllByText('表示できる会話本文はありません')).toHaveLength(2)
   })
 
   it('renders an error panel without success cards when the fetch fails', () => {

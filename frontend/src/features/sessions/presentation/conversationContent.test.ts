@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import type { SessionConversationEntry } from '../api/sessionApi.types.ts'
-import { formatConversationEntryContent } from './conversationContent.ts'
+import {
+  formatConversationEntryContent,
+  shouldDefaultHideConversationEntryContent,
+} from './conversationContent.ts'
 
 function buildEntry(overrides: Partial<SessionConversationEntry> = {}): SessionConversationEntry {
   return {
@@ -51,8 +54,8 @@ describe('formatConversationEntryContent', () => {
           argumentsPreview: '{"command":"pwd"}',
           isTruncated: false,
           status: 'complete',
-          argumentsDefaultCollapsed: false,
-          collapseReason: 'none',
+          argumentsDefaultCollapsed: true,
+          collapseReason: 'arguments_preview',
         },
       ],
     })
@@ -120,7 +123,7 @@ describe('formatConversationEntryContent', () => {
     })
   })
 
-  it('collapses multiline and truncated arguments while keeping short single-line arguments open', () => {
+  it('collapses every tool arguments preview by default while preserving the collapse reason', () => {
     expect(
       formatConversationEntryContent(
         buildEntry({
@@ -141,6 +144,12 @@ describe('formatConversationEntryContent', () => {
             {
               name: 'functions.exec_command',
               arguments_preview: '{"command":"pwd"}',
+              is_truncated: false,
+              status: 'complete',
+            },
+            {
+              name: 'functions.exec_command',
+              arguments_preview: null,
               is_truncated: false,
               status: 'complete',
             },
@@ -172,9 +181,36 @@ describe('formatConversationEntryContent', () => {
         argumentsPreview: '{"command":"pwd"}',
         isTruncated: false,
         status: 'complete',
+        argumentsDefaultCollapsed: true,
+        collapseReason: 'arguments_preview',
+      },
+      {
+        kind: 'tool_hint',
+        name: 'functions.exec_command',
+        argumentsPreview: null,
+        isTruncated: false,
+        status: 'complete',
         argumentsDefaultCollapsed: false,
         collapseReason: 'none',
       },
     ])
+  })
+})
+
+describe('shouldDefaultHideConversationEntryContent', () => {
+  it('returns true when the entry starts with a skill-context tag', () => {
+    expect(
+      shouldDefaultHideConversationEntryContent(
+        '  <skill-context name="kiro-debug">\ncontext body\n</skill-context>',
+      ),
+    ).toBe(true)
+  })
+
+  it('returns false for regular message content and tool-only entries', () => {
+    expect(shouldDefaultHideConversationEntryContent('I will inspect the current session.')).toBe(
+      false,
+    )
+    expect(shouldDefaultHideConversationEntryContent('')).toBe(false)
+    expect(shouldDefaultHideConversationEntryContent(null)).toBe(false)
   })
 })

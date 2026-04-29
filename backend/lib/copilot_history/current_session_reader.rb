@@ -11,7 +11,7 @@ module CopilotHistory
       raise ArgumentError, "source format must be current" unless source.format == :current
 
       workspace_metadata, workspace_issues = read_workspace(source.artifact_paths.fetch(:workspace))
-      events, event_issues, events_mtime = read_events(source)
+      events, event_issues, events_mtime, selected_model = read_events(source)
       issues = workspace_issues + event_issues
 
       CopilotHistory::Types::NormalizedSession.new(
@@ -24,7 +24,7 @@ module CopilotHistory
         branch: workspace_metadata["branch"],
         created_at: workspace_metadata["created_at"],
         updated_at: corrected_updated_at(events:, events_mtime:, workspace_metadata:),
-        selected_model: nil,
+        selected_model: selected_model,
         events: events,
         message_snapshots: [],
         issues: issues,
@@ -53,16 +53,18 @@ module CopilotHistory
 
     def read_events(source)
       events_path = source.artifact_paths.fetch(:events)
-      return [ [], [ warning_issue(CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_MISSING, "events.jsonl is missing for current session", events_path) ], nil ] unless events_path.exist?
-      return [ [], [ error_issue(CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_UNREADABLE, "events.jsonl is not accessible", events_path) ], nil ] unless readable_file?(events_path)
+      return [ [], [ warning_issue(CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_MISSING, "events.jsonl is missing for current session", events_path) ], nil, nil ] unless events_path.exist?
+      return [ [], [ error_issue(CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_UNREADABLE, "events.jsonl is not accessible", events_path) ], nil, nil ] unless readable_file?(events_path)
 
       normalizer = event_normalizer_class.new(source_path: events_path)
       events = []
       issues = []
       events_mtime = events_path.stat.mtime
+      selected_model_candidate = nil
 
       events_path.each_line.with_index(1) do |line, sequence|
         raw_event = JSON.parse(line)
+        selected_model_candidate = choose_model_candidate(selected_model_candidate, extract_model_candidate(raw_event))
         normalization_result = normalizer.call(
           raw_event: raw_event,
           source_format: source.format,
@@ -80,9 +82,10 @@ module CopilotHistory
         )
       end
 
-      [ events, issues, events_mtime ]
+      selected_model = selected_model_candidate&.fetch(:value)
+      [ events, issues, events_mtime, selected_model ]
     rescue SystemCallError
-      [ [].freeze, [ error_issue(CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_UNREADABLE, "events.jsonl is not accessible", events_path) ], nil ]
+      [ [].freeze, [ error_issue(CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_UNREADABLE, "events.jsonl is not accessible", events_path) ], nil, nil ]
     end
 
     def error_issue(code, message, source_path, sequence: nil)
@@ -142,6 +145,41 @@ module CopilotHistory
     def corrected_updated_at(events:, events_mtime:, workspace_metadata:)
       event_updated_at = events.filter_map(&:occurred_at).max
       event_updated_at || events_mtime || parse_time(workspace_metadata["updated_at"]) || parse_time(workspace_metadata["created_at"])
+    end
+
+    def choose_model_candidate(current_candidate, next_candidate)
+      return current_candidate if next_candidate.nil?
+      return next_candidate if current_candidate.nil?
+      return next_candidate if next_candidate.fetch(:priority) >= current_candidate.fetch(:priority)
+
+      current_candidate
+    end
+
+    def extract_model_candidate(raw_event)
+      return nil unless raw_event.is_a?(Hash)
+
+      data = raw_event["data"].is_a?(Hash) ? raw_event["data"] : {}
+      candidate_values_for(raw_event.fetch("type", nil), data, raw_event).filter_map do |priority, candidate|
+        normalized_candidate = normalize_model_candidate(candidate)
+        next if normalized_candidate.nil?
+
+        { priority: priority, value: normalized_candidate }
+      end.reduce(nil) { |selected, candidate| choose_model_candidate(selected, candidate) }
+    end
+
+    def candidate_values_for(raw_type, data, raw_event)
+      values = []
+      values << [ 3, data["currentModel"] ] if raw_type == "session.shutdown"
+      values << [ 2, data["model"] ] if raw_type == "tool.execution_complete"
+      values << [ 1, data["model"] ] if raw_type == "assistant.usage"
+      values << [ 0, raw_event["model"] ]
+      values
+    end
+
+    def normalize_model_candidate(candidate)
+      return nil unless candidate.is_a?(String)
+
+      candidate.strip.then { |value| value.empty? ? nil : value }
     end
 
     def parse_time(value)

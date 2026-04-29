@@ -419,6 +419,42 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
       end
     end
 
+    it "serves current model values and tool-only conversation entries from the shared current model fixture" do
+      with_copilot_history_fixture("current_model") do |root|
+        ENV["COPILOT_HOME"] = root.to_s
+
+        get "/api/sessions"
+
+        expect(response).to have_http_status(:ok)
+        index_sessions = JSON.parse(response.body, symbolize_names: true).fetch(:data)
+        expect(index_sessions.find { |session| session.fetch(:id) == "current-model-with-values" }.fetch(:selected_model)).to eq("gpt-5-current")
+        expect(index_sessions.find { |session| session.fetch(:id) == "current-model-without-values" }.fetch(:selected_model)).to be_nil
+
+        get "/api/sessions/current-model-with-values"
+
+        expect(response).to have_http_status(:ok)
+        payload = JSON.parse(response.body, symbolize_names: true).fetch(:data)
+        expect(payload.fetch(:selected_model)).to eq("gpt-5-current")
+
+        tool_only_entries = payload.fetch(:conversation).fetch(:entries).select do |entry|
+          entry.fetch(:content).to_s.empty? && entry.fetch(:tool_calls).any?
+        end
+        expect(tool_only_entries.map { |entry| [ entry.fetch(:role), entry.fetch(:tool_calls).first.fetch(:name) ] }).to eq(
+          [
+            [ "assistant", "skill-context" ],
+            [ "user", "functions.submit_feedback" ]
+          ]
+        )
+        expect(tool_only_entries.map { |entry| entry.fetch(:degraded) }).to eq([ false, false ])
+        expect(tool_only_entries.map { |entry| entry.fetch(:issues) }).to eq([ [], [] ])
+
+        get "/api/sessions/current-model-without-values"
+
+        expect(response).to have_http_status(:ok)
+        expect(JSON.parse(response.body, symbolize_names: true).fetch(:data).fetch(:selected_model)).to be_nil
+      end
+    end
+
     it "only includes raw payloads when include_raw is exactly true" do
       with_copilot_history_fixture("current_schema_valid") do |root|
         ENV["COPILOT_HOME"] = root.to_s

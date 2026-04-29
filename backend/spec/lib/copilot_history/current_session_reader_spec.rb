@@ -352,6 +352,62 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
       end
     end
 
+    it "extracts selected_model from the shared current model fixture and ignores lower-priority later candidates" do
+      with_copilot_history_fixture("current_model") do |root|
+        with_model_session = described_class.new.call(build_source(root, "current-model-with-values"))
+
+        expect(with_model_session.selected_model).to eq("gpt-5-current")
+      end
+    end
+
+    it "falls back to tool.execution_complete data.model when shutdown currentModel is unavailable" do
+      with_copilot_history_fixture("current_model") do |root|
+        session = described_class.new.call(build_source(root, "current-model-tool-fallback"))
+
+        expect(session.selected_model).to eq("gpt-5-tool-fallback")
+      end
+    end
+
+    it "uses the later non-empty model candidate within the same priority" do
+      with_copilot_history_fixture("current_model") do |root|
+        session = described_class.new.call(build_source(root, "current-model-same-priority-later"))
+
+        expect(session.selected_model).to eq("gpt-5-tool-later")
+      end
+    end
+
+    it "trims confirmed model candidates before storing selected_model" do
+      with_copilot_history_fixture("current_model") do |root|
+        session = described_class.new.call(build_source(root, "current-model-trimmed"))
+
+        expect(session.selected_model).to eq("gpt-5-trimmed")
+      end
+    end
+
+    it "prefers saved assistant.usage data.model over a root model when higher-priority candidates are unavailable" do
+      with_copilot_history_fixture("current_model") do |root|
+        session = described_class.new.call(build_source(root, "current-model-usage-fallback"))
+
+        expect(session.selected_model).to eq("gpt-5-usage-fallback")
+      end
+    end
+
+    it "falls back to a saved root model when higher-priority candidates are unavailable" do
+      with_copilot_history_fixture("current_model") do |root|
+        session = described_class.new.call(build_source(root, "current-model-root-fallback"))
+
+        expect(session.selected_model).to eq("gpt-5-root-fallback")
+      end
+    end
+
+    it "returns nil when the current model fixture has only missing or unusable candidates" do
+      with_copilot_history_fixture("current_model") do |root|
+        without_model_session = described_class.new.call(build_source(root, "current-model-without-values"))
+
+        expect(without_model_session.selected_model).to be_nil
+      end
+    end
+
     def build_source(root, session_id)
       source_path = root.join("session-state", session_id)
 

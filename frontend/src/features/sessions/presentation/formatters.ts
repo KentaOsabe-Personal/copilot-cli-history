@@ -1,8 +1,6 @@
 import type { SessionIssue, SessionSourceState, WorkContext } from '../api/sessionApi.types.ts'
 
 const MISSING_TIMESTAMP_LABEL = '時刻不明'
-const MISSING_WORK_CONTEXT_LABEL = '作業コンテキスト不明'
-const MISSING_MODEL_LABEL = 'モデル不明'
 const JST_TIME_ZONE = 'Asia/Tokyo'
 const JST_SUFFIX = 'JST'
 const JST_TIMESTAMP_FORMATTER = new Intl.DateTimeFormat('en-CA', {
@@ -46,7 +44,17 @@ export function formatTimestamp(value: string | null): string {
   return `${partValues.year}-${partValues.month}-${partValues.day} ${partValues.hour}:${partValues.minute}:${partValues.second} ${JST_SUFFIX}`
 }
 
-export function formatWorkContext(workContext: WorkContext): string {
+export interface MetadataDisplayItem {
+  label: '更新日時' | '作業コンテキスト' | 'モデル'
+  value: string
+}
+
+export interface SessionSignalBadge {
+  label: string
+  tone: 'neutral' | 'warning'
+}
+
+export function getDisplayableWorkContext(workContext: WorkContext): string | null {
   const repository = normalizeText(workContext.repository)
   const branch = normalizeText(workContext.branch)
   const cwd = normalizeText(workContext.cwd)
@@ -56,11 +64,42 @@ export function formatWorkContext(workContext: WorkContext): string {
     return `${repository} @ ${branch}`
   }
 
-  return repository ?? cwd ?? gitRoot ?? MISSING_WORK_CONTEXT_LABEL
+  return repository ?? cwd ?? gitRoot
 }
 
-export function formatModel(value: string | null): string {
-  return normalizeText(value) ?? MISSING_MODEL_LABEL
+export function getDisplayableModel(value: string | null): string | null {
+  return normalizeText(value)
+}
+
+export function buildSessionMetadataItems(input: {
+  updatedAt: string | null
+  workContext: WorkContext
+  selectedModel: string | null
+}): readonly MetadataDisplayItem[] {
+  const items: MetadataDisplayItem[] = [
+    {
+      label: '更新日時',
+      value: formatTimestamp(input.updatedAt),
+    },
+  ]
+  const workContext = getDisplayableWorkContext(input.workContext)
+  const model = getDisplayableModel(input.selectedModel)
+
+  if (workContext != null) {
+    items.push({
+      label: '作業コンテキスト',
+      value: workContext,
+    })
+  }
+
+  if (model != null) {
+    items.push({
+      label: 'モデル',
+      value: model,
+    })
+  }
+
+  return items
 }
 
 export function formatDegradedLabel(degraded: boolean): string {
@@ -73,6 +112,38 @@ export function formatSourceStateLabel(sourceState: SessionSourceState): string 
   }
 
   return sourceState
+}
+
+export function buildSessionSummarySignals(input: {
+  hasConversation: boolean
+  degraded: boolean
+  sourceState: SessionSourceState
+}): readonly SessionSignalBadge[] {
+  const badges: SessionSignalBadge[] = []
+
+  if (!input.hasConversation) {
+    badges.push({
+      label: input.sourceState === 'workspace_only' ? 'workspace-only' : 'metadata-only',
+      tone: input.sourceState === 'workspace_only' ? 'warning' : 'neutral',
+    })
+  }
+
+  const constraintBadge = buildSessionConstraintBadge(input)
+
+  if (constraintBadge != null && !badges.some((badge) => badge.label === constraintBadge.label)) {
+    badges.push(constraintBadge)
+  }
+
+  return badges
+}
+
+export function buildSessionDetailSignals(input: {
+  degraded: boolean
+  sourceState: SessionSourceState
+}): readonly SessionSignalBadge[] {
+  const constraintBadge = buildSessionConstraintBadge(input)
+
+  return constraintBadge == null ? [] : [constraintBadge]
 }
 
 export function formatIssueMetadata(
@@ -100,4 +171,25 @@ function normalizeText(value: string | null): string | null {
   const normalized = value?.trim()
 
   return normalized != null && normalized.length > 0 ? normalized : null
+}
+
+function buildSessionConstraintBadge(input: {
+  degraded: boolean
+  sourceState: SessionSourceState
+}): SessionSignalBadge | null {
+  if (input.degraded || input.sourceState === 'degraded') {
+    return {
+      label: '一部欠損あり',
+      tone: 'warning',
+    }
+  }
+
+  if (input.sourceState === 'workspace_only') {
+    return {
+      label: 'workspace-only',
+      tone: 'warning',
+    }
+  }
+
+  return null
 }

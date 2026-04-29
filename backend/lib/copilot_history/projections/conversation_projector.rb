@@ -41,7 +41,7 @@ module CopilotHistory
       def conversation_event?(event)
         event.kind == :message &&
           %w[user assistant].include?(event.role.to_s) &&
-          present?(event.content)
+          (present?(event.content) || event.tool_calls.any?)
       end
 
       def empty_reason_for(session:, entries:)

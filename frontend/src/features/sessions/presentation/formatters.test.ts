@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildSessionMetadataItems,
+  buildSessionDetailSignals,
+  buildSessionSummarySignals,
   formatDegradedLabel,
   formatIssueMetadata,
-  formatModel,
   formatTimestamp,
-  formatWorkContext,
+  getDisplayableModel,
+  getDisplayableWorkContext,
 } from './formatters.ts'
 
 describe('formatters', () => {
@@ -26,16 +29,45 @@ describe('formatters', () => {
     expect(formatTimestamp('not-a-timestamp')).not.toContain('JST')
   })
 
-  it('formats missing work context and missing model with placeholders', () => {
+  it('returns displayable work context and model values only when real metadata exists', () => {
     expect(
-      formatWorkContext({
+      getDisplayableWorkContext({
         cwd: null,
         git_root: null,
         repository: null,
         branch: null,
       }),
-    ).toBe('作業コンテキスト不明')
-    expect(formatModel(null)).toBe('モデル不明')
+    ).toBeNull()
+    expect(getDisplayableModel(null)).toBeNull()
+    expect(
+      getDisplayableWorkContext({
+        cwd: '/workspace/example',
+        git_root: '/workspace/example',
+        repository: 'octo/example',
+        branch: 'main',
+      }),
+    ).toBe('octo/example @ main')
+    expect(getDisplayableModel('  gpt-5.4  ')).toBe('gpt-5.4')
+  })
+
+  it('builds metadata items without placeholder-only work context or model entries', () => {
+    expect(
+      buildSessionMetadataItems({
+        updatedAt: null,
+        workContext: {
+          cwd: null,
+          git_root: null,
+          repository: null,
+          branch: null,
+        },
+        selectedModel: null,
+      }),
+    ).toEqual([
+      {
+        label: '更新日時',
+        value: '時刻不明',
+      },
+    ])
   })
 
   it('formats degraded and issue metadata into readable labels', () => {
@@ -52,5 +84,35 @@ describe('formatters', () => {
       scopeLabel: 'イベント',
       locationLabel: 'イベント #8',
     })
+  })
+
+  it('builds only exceptional session signals for summary and detail surfaces', () => {
+    expect(
+      buildSessionSummarySignals({
+        hasConversation: true,
+        degraded: false,
+        sourceState: 'complete',
+      }),
+    ).toEqual([])
+    expect(
+      buildSessionSummarySignals({
+        hasConversation: false,
+        degraded: false,
+        sourceState: 'complete',
+      }),
+    ).toEqual([{ label: 'metadata-only', tone: 'neutral' }])
+    expect(
+      buildSessionSummarySignals({
+        hasConversation: false,
+        degraded: false,
+        sourceState: 'workspace_only',
+      }),
+    ).toEqual([{ label: 'workspace-only', tone: 'warning' }])
+    expect(
+      buildSessionDetailSignals({
+        degraded: true,
+        sourceState: 'degraded',
+      }),
+    ).toEqual([{ label: '一部欠損あり', tone: 'warning' }])
   })
 })

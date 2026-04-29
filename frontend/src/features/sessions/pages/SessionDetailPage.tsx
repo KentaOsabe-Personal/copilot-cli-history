@@ -2,6 +2,7 @@ import { useParams } from 'react-router'
 
 import ActivityTimeline from '../components/ActivityTimeline.tsx'
 import ConversationTranscript from '../components/ConversationTranscript.tsx'
+import DisclosureSection from '../components/DisclosureSection.tsx'
 import IssueList from '../components/IssueList.tsx'
 import SessionDetailHeader from '../components/SessionDetailHeader.tsx'
 import StatusPanel from '../components/StatusPanel.tsx'
@@ -15,6 +16,14 @@ function SessionDetailPage() {
   }
 
   const { state, requestRaw } = useSessionDetail(sessionId)
+
+  const activityEntries =
+    state.status === 'success' ? state.detail.activity.entries : []
+  const hasActivityWarning =
+    state.status === 'success' &&
+    activityEntries.some(
+      (entry) => entry.degraded || entry.mapping_status === 'partial' || entry.issues.length > 0,
+    )
 
   return (
     <section className="flex flex-col gap-6">
@@ -48,22 +57,40 @@ function SessionDetailPage() {
       ) : null}
 
       {state.status === 'success' ? (
-          <>
-            <SessionDetailHeader detail={state.detail} />
-            <IssueList title="セッションの issue" issues={state.detail.issues} />
-            <ConversationTranscript
-              conversation={state.detail.conversation}
-              stateScopeKey={`session:${state.detail.id}:conversation`}
-            />
-            <ActivityTimeline
-              activity={state.detail.activity}
-              rawIncluded={state.detail.raw_included}
-              rawStatus={state.rawStatus}
-              onRequestRaw={requestRaw}
-              stateScopeKey={`session:${state.detail.id}`}
-            />
-          </>
-        ) : null}
+        <>
+          <SessionDetailHeader detail={state.detail} />
+          <ConversationTranscript
+            conversation={state.detail.conversation}
+            stateScopeKey={`session:${state.detail.id}:conversation`}
+          />
+          {state.detail.issues.length > 0 ? (
+            <DisclosureSection
+              title="セッションの issue"
+              summary={`${state.detail.issues.length} 件の session issue があります`}
+              count={state.detail.issues.length}
+              hasWarning={state.detail.degraded || state.detail.issues.length > 0}
+            >
+              <IssueList issues={state.detail.issues} />
+            </DisclosureSection>
+          ) : null}
+          {activityEntries.length > 0 ? (
+            <DisclosureSection
+              title="内部 activity"
+              summary={`${activityEntries.length} 件の補助 event を確認できます`}
+              count={activityEntries.length}
+              hasWarning={hasActivityWarning}
+            >
+              <ActivityTimeline
+                activity={state.detail.activity}
+                rawIncluded={state.detail.raw_included}
+                rawStatus={state.rawStatus}
+                onRequestRaw={requestRaw}
+                stateScopeKey={`session:${state.detail.id}`}
+              />
+            </DisclosureSection>
+          ) : null}
+        </>
+      ) : null}
     </section>
   )
 }
