@@ -139,15 +139,15 @@
   - _Depends: 5.1, 6.3_
   - _Requirements: 7.1, 7.2, 7.3, 7.4_
 
-- [ ] 7. Validation: backend / frontend / integration 回帰を固定する
-- [ ] 7.1 backend specs で normalizer、reader、projection の contract を固定する
+- [x] 7. Validation: backend / frontend / integration 回帰を固定する
+- [x] 7.1 backend specs で normalizer、reader、projection の contract を固定する
   - current message、empty assistant tool request、system/detail/unknown、tool redaction、partial tool、invalid JSONL、workspace-only、updated_at fallback を検証する。
   - legacy session が current 互換追加後も conversation projection と source state で後退しないことを検証する。
   - 完了時には backend unit specs が current / legacy の会話抽出、activity 分離、degraded 可視化を失敗で検知できる。
   - _Depends: 2.1, 2.2, 2.3, 3.1, 3.2, 3.3_
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 3.1, 3.4, 4.2, 4.3, 5.4, 6.1, 6.2, 6.3, 8.1, 8.2, 8.4, 8.5_
 
-- [ ] 7.2 backend API specs で index / detail / raw inclusion を固定する
+- [x] 7.2 backend API specs で index / detail / raw inclusion を固定する
   - current schema fixture から conversation、activity、timeline、issues、raw_included=false が返ることを確認する。
   - `include_raw=true` だけ raw payload が入り、未指定または `true` 以外では通常 detail になることを確認する。
   - mixed current / legacy で sort、conversation summary、workspace-only、degraded state が一貫することを確認する。
@@ -155,7 +155,7 @@
   - _Depends: 4.1, 4.2, 4.3_
   - _Requirements: 2.1, 2.3, 5.1, 5.2, 5.3, 5.5, 6.4, 7.1, 7.2, 7.3, 7.4, 8.3, 8.4_
 
-- [ ] 7.3 frontend tests で conversation-first 表示と activity 分離を固定する
+- [x] 7.3 frontend tests で conversation-first 表示と activity 分離を固定する
   - detail 画面で user / assistant conversation が最初に表示され、activity が主会話に混在しないことを確認する。
   - 会話なし状態、tool hint、code block、partial issue、unknown activity、raw 明示 action を確認する。
   - 一覧カードで会話有無、会話数、preview、source state、updated_at、degraded 状態を確認する。
@@ -163,7 +163,7 @@
   - _Depends: 6.1, 6.2, 6.3, 6.4_
   - _Requirements: 2.1, 2.2, 2.3, 2.5, 3.2, 3.3, 4.1, 4.2, 4.4, 5.1, 5.2, 5.3, 5.4, 6.4, 7.1, 7.2, 8.3, 8.5_
 
-- [ ] 7.4 Docker Compose 経由で backend / frontend の既存検証を通す
+- [x] 7.4 Docker Compose 経由で backend / frontend の既存検証を通す
   - backend は RSpec / CI 導線で current / legacy 互換と raw 分離の specs を実行する。
   - frontend は Vitest / build 導線で conversation-first UI と API 型の整合を確認する。
   - 完了時には既存の Compose ベース検証で backend と frontend の両方が成功し、実装タスク全体の完了判断に使える。
