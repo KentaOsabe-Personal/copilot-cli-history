@@ -160,9 +160,10 @@ module CopilotHistory
 
       data = raw_event["data"].is_a?(Hash) ? raw_event["data"] : {}
       candidate_values_for(raw_event.fetch("type", nil), data, raw_event).filter_map do |priority, candidate|
-        next unless usable_model_candidate?(candidate)
+        normalized_candidate = normalize_model_candidate(candidate)
+        next if normalized_candidate.nil?
 
-        { priority: priority, value: candidate }
+        { priority: priority, value: normalized_candidate }
       end.reduce(nil) { |selected, candidate| choose_model_candidate(selected, candidate) }
     end
 
@@ -175,8 +176,10 @@ module CopilotHistory
       values
     end
 
-    def usable_model_candidate?(candidate)
-      candidate.is_a?(String) && !candidate.strip.empty?
+    def normalize_model_candidate(candidate)
+      return nil unless candidate.is_a?(String)
+
+      candidate.strip.then { |value| value.empty? ? nil : value }
     end
 
     def parse_time(value)

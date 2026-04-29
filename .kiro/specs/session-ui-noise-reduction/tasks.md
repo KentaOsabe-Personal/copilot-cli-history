@@ -14,7 +14,7 @@
   - _Requirements: 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 2.5, 3.2, 3.4, 4.2, 4.3, 5.5, 6.2, 6.3_
 
 - [ ] 2. backend の current metadata と会話投影を既存 contract に接続する
-- [ ] 2.1 current 形式の保存済み event から確認できるモデル名を session metadata として抽出する
+- [x] 2.1 current 形式の保存済み event から確認できるモデル名を session metadata として抽出する
   - 確認済みの model 候補を優先順に評価し、同一優先度では後続 event の非空値を採用する
   - model が存在しない、空、または文字列でない場合は推測値や placeholder を作らず欠損として扱う
   - 完了時には current 形式の session が既存の selected model contract を通じてモデル名または null を返す

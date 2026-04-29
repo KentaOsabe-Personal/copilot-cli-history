@@ -368,6 +368,22 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
       end
     end
 
+    it "uses the later non-empty model candidate within the same priority" do
+      with_copilot_history_fixture("current_model") do |root|
+        session = described_class.new.call(build_source(root, "current-model-same-priority-later"))
+
+        expect(session.selected_model).to eq("gpt-5-tool-later")
+      end
+    end
+
+    it "trims confirmed model candidates before storing selected_model" do
+      with_copilot_history_fixture("current_model") do |root|
+        session = described_class.new.call(build_source(root, "current-model-trimmed"))
+
+        expect(session.selected_model).to eq("gpt-5-trimmed")
+      end
+    end
+
     it "falls back to saved assistant.usage data.model when higher-priority candidates are unavailable" do
       with_copilot_history_fixture("current_model") do |root|
         session = described_class.new.call(build_source(root, "current-model-usage-fallback"))
