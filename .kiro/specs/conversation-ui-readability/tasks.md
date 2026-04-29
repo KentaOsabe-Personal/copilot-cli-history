@@ -41,8 +41,8 @@
   - _Requirements: 5.1, 5.3, 5.4, 5.5, 6.2_
   - _Boundary: useSessionIndex_
 
-- [ ] 3. 表示モデルを既存 UI に統合する
-- [ ] 3.1 tool call arguments の disclosure UI を会話と activity の共有表示に統合する
+- [x] 3. 表示モデルを既存 UI に統合する
+- [x] 3.1 tool call arguments の disclosure UI を会話と activity の共有表示に統合する
   - 折りたたみ中も tool call の visual block、tool 名、status、truncated badge が本文とは別に表示される
   - 展開後は同じ tool block 内で arguments preview、tool 名、status、truncated 状態を確認できる
   - arguments preview がない tool call では不要な展開操作を出さず、tool の存在だけを表示する
@@ -51,7 +51,7 @@
   - _Requirements: 2.5, 3.2, 3.3, 4.1, 4.2, 4.3, 4.4, 4.5, 6.4_
   - _Boundary: TimelineContent_
 
-- [ ] 3.2 発話単位の表示 / 非表示操作を会話 transcript に追加する
+- [x] 3.2 発話単位の表示 / 非表示操作を会話 transcript に追加する
   - 各発話に本文の表示 / 非表示を切り替える操作があり、状態は component lifetime 内だけで保持される
   - 非表示時は本文、code block、tool call 補助情報、発話内 issue 詳細が DOM 上から隠れる
   - 非表示時も発話番号、role、JST 日時、degraded 状態は確認できる
@@ -61,7 +61,7 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 6.3, 6.4_
   - _Boundary: ConversationTranscript_
 
-- [ ] 3.3 cached 一覧状態を一覧画面の既存導線に接続する
+- [x] 3.3 cached 一覧状態を一覧画面の既存導線に接続する
   - cached success を表示している間も、既存の session link 群から詳細へ移動できる
   - cached empty の場合も、詳細から戻った直後に空状態が即時に表示される
   - 一覧再利用のために検索、絞り込み、並び替え、自動更新、手動再読み込みの新操作を追加しない

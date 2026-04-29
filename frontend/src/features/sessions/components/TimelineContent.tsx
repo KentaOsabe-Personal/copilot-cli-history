@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import type { SessionTimelineEvent } from '../api/sessionApi.types.ts'
 import { formatTimelineContent } from '../presentation/timelineContent.ts'
 
@@ -7,6 +9,7 @@ interface TimelineContentProps {
 
 function TimelineContent({ event }: TimelineContentProps) {
   const { blocks } = formatTimelineContent(event)
+  const [expandedTools, setExpandedTools] = useState<Readonly<Record<string, boolean>>>({})
 
   if (blocks.length === 0) {
     return null
@@ -16,28 +19,56 @@ function TimelineContent({ event }: TimelineContentProps) {
     <div className="flex flex-col gap-3">
       {blocks.map((block, index) => {
         if (block.kind === 'tool_hint') {
+          const toolName = block.name ?? 'unknown tool'
+          const toolKey = `tool-${index}`
+          const hasArgumentsPreview = block.argumentsPreview != null
+          const isExpanded = expandedTools[toolKey] ?? !block.argumentsDefaultCollapsed
+
           return (
             <section
-              key={`tool-${index}`}
+              key={toolKey}
+              role="group"
+              aria-label={`tool call ${toolName}`}
               className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-4 text-cyan-50"
             >
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-100/80">
-                  ツール呼び出し
-                </p>
-                {block.status === 'partial' ? (
-                  <span className="rounded-full border border-amber-300/40 bg-amber-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100">
-                    partial
-                  </span>
-                ) : null}
-                {block.isTruncated ? (
-                  <span className="rounded-full border border-cyan-200/30 bg-cyan-50/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-50">
-                    truncated
-                  </span>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-100/80">
+                      ツール呼び出し
+                    </p>
+                    {block.status === 'partial' ? (
+                      <span className="rounded-full border border-amber-300/40 bg-amber-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100">
+                        partial
+                      </span>
+                    ) : null}
+                    {block.isTruncated ? (
+                      <span className="rounded-full border border-cyan-200/30 bg-cyan-50/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-50">
+                        truncated
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 font-mono text-sm text-cyan-100">{toolName}</p>
+                </div>
+
+                {hasArgumentsPreview ? (
+                  <button
+                    type="button"
+                    className="rounded-full border border-cyan-200/30 bg-cyan-50/10 px-3 py-1 text-xs font-semibold text-cyan-50 transition hover:border-cyan-100/60 hover:bg-cyan-50/20"
+                    aria-expanded={isExpanded}
+                    onClick={() => {
+                      setExpandedTools((current) => ({
+                        ...current,
+                        [toolKey]: !isExpanded,
+                      }))
+                    }}
+                  >
+                    {isExpanded ? 'arguments を隠す' : 'arguments を表示'}
+                  </button>
                 ) : null}
               </div>
-              <p className="mt-2 font-mono text-sm text-cyan-100">{block.name ?? 'unknown tool'}</p>
-              {block.argumentsPreview != null ? (
+
+              {hasArgumentsPreview && isExpanded ? (
                 <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-xl bg-slate-950/50 p-3 text-xs text-cyan-50">
                   <code>{block.argumentsPreview}</code>
                 </pre>

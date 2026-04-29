@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
 import type { SessionConversation } from '../api/sessionApi.types.ts'
@@ -64,5 +65,66 @@ describe('ConversationTranscript', () => {
     expect(assistantEntry).toHaveAttribute('data-role', 'assistant')
     expect(assistantEntry).toHaveTextContent('partial')
     expect(assistantEntry).toHaveTextContent('message was incomplete')
+  })
+
+  it('hides and restores entry body, code, tool hints, and issue details while keeping metadata visible', async () => {
+    const user = userEvent.setup()
+    const conversation: SessionConversation = {
+      ...buildConversation(),
+      entries: [
+        {
+          sequence: 7,
+          role: 'assistant',
+          content: 'Visible body\n```sh\nnpm test\n```',
+          occurred_at: '2026-04-26T09:01:00Z',
+          tool_calls: [
+            {
+              name: 'skill-context',
+              arguments_preview: 'long\ncontext',
+              is_truncated: true,
+              status: 'partial',
+            },
+          ],
+          degraded: true,
+          issues: [
+            {
+              code: 'partial_message',
+              severity: 'warning',
+              message: 'message was incomplete',
+              source_path: null,
+              scope: 'event',
+              event_sequence: 7,
+            },
+          ],
+        },
+      ],
+    }
+
+    render(<ConversationTranscript conversation={conversation} />)
+
+    const entry = screen.getByTestId('conversation-entry-7')
+
+    expect(entry).toHaveTextContent('Visible body')
+    expect(entry).toHaveTextContent('npm test')
+    expect(entry).toHaveTextContent('skill-context')
+    expect(entry).toHaveTextContent('message was incomplete')
+
+    await user.click(screen.getByRole('button', { name: '発話 #7 を非表示' }))
+
+    expect(entry).toHaveTextContent('発話 #7')
+    expect(entry).toHaveTextContent('assistant')
+    expect(entry).toHaveTextContent('2026-04-26 18:01:00 JST')
+    expect(entry).toHaveTextContent('partial')
+    expect(entry).not.toHaveTextContent('Visible body')
+    expect(entry).not.toHaveTextContent('npm test')
+    expect(entry).not.toHaveTextContent('skill-context')
+    expect(entry).not.toHaveTextContent('message was incomplete')
+
+    await user.click(screen.getByRole('button', { name: '発話 #7 を表示' }))
+
+    expect(entry).toHaveTextContent('Visible body')
+    expect(entry).toHaveTextContent('npm test')
+    expect(entry).toHaveTextContent('skill-context')
+    expect(entry).toHaveTextContent('message was incomplete')
   })
 })
