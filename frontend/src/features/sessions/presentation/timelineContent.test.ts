@@ -79,8 +79,8 @@ describe('formatTimelineContent', () => {
           argumentsPreview: '{"command":"pwd"}',
           isTruncated: false,
           status: 'complete',
-          argumentsDefaultCollapsed: false,
-          collapseReason: 'none',
+          argumentsDefaultCollapsed: true,
+          collapseReason: 'arguments_preview',
         },
       ],
     })

@@ -252,6 +252,31 @@ describe('SessionDetailPage', () => {
     expect(screen.getByText('2026-04-26 18:00:03 JST')).toBeInTheDocument()
   })
 
+  it('omits placeholder-only work context and model metadata from the detail header', () => {
+    mockedUseSessionDetail.mockReturnValue({
+      state: {
+        status: 'success',
+        sessionId: 'session-123',
+        rawStatus: 'idle',
+        detail: buildDetail({
+          work_context: {
+            cwd: null,
+            git_root: null,
+            repository: null,
+            branch: null,
+          },
+          selected_model: null,
+        }),
+      },
+      requestRaw,
+    })
+
+    renderDetailPage()
+
+    expect(screen.queryByText('作業コンテキスト不明')).not.toBeInTheDocument()
+    expect(screen.queryByText('モデル不明')).not.toBeInTheDocument()
+  })
+
   it('keeps tool, code, partial, and unknown timeline events readable in sequence order', () => {
     mockedUseSessionDetail.mockReturnValue({
       state: {

@@ -21,6 +21,7 @@ export type ToolCollapseReason =
   | 'skill_context'
   | 'multiline_arguments'
   | 'truncated_arguments'
+  | 'arguments_preview'
   | 'none'
 
 export interface ConversationEntryContentModel {
@@ -103,11 +104,15 @@ function resolveToolCollapseReason(toolCall: SessionTimelineToolCall): ToolColla
     return 'truncated_arguments'
   }
 
+  if (toolCall.arguments_preview == null) {
+    return 'none'
+  }
+
   if (toolCall.arguments_preview?.includes('\n') === true) {
     return 'multiline_arguments'
   }
 
-  return 'none'
+  return 'arguments_preview'
 }
 
 function pushTextBlock(blocks: ConversationVisualBlock[], text: string) {

@@ -36,15 +36,15 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.5, 4.3, 5.2, 5.5_
   - _Boundary: API presenters_
 
-- [ ] 3. frontend の表示 policy を helper 境界に集約する
-- [ ] 3.1 値がある metadata だけを表示項目に変換する
+- [x] 3. frontend の表示 policy を helper 境界に集約する
+- [x] 3.1 値がある metadata だけを表示項目に変換する
   - work context は利用可能な候補から読みやすい表示値を作り、全候補が欠損する場合は項目を生成しない
   - selected model は trim 後の非空文字列だけを表示対象にし、不明 placeholder は生成しない
   - 完了時には一覧と詳細の component が metadata item の有無だけで空領域を出すかどうかを判断できる
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 3.2, 3.4_
   - _Boundary: metadata display helpers_
 
-- [ ] 3.2 (P) tool arguments の初期折りたたみ方針を会話表示用 helper に集約する
+- [x] 3.2 (P) tool arguments の初期折りたたみ方針を会話表示用 helper に集約する
   - arguments preview を持つ tool call は短さに関係なく初期 collapsed にする
   - skill-context と truncated / partial の状態を、展開前の見出しで識別できる表示情報として保持する
   - 完了時には tool 名は初期表示で読めるが、arguments の詳細は明示操作まで本文の流れを押し下げない

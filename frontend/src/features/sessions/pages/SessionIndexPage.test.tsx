@@ -75,7 +75,7 @@ describe('SessionIndexPage', () => {
     expect(screen.getByText('表示できるセッションはありません。')).toBeInTheDocument()
   })
 
-  it('renders ordered session cards with degraded state and placeholder metadata', () => {
+  it('renders ordered session cards without placeholder-only work context or model metadata', () => {
     mockedUseSessionIndex.mockReturnValue({
       state: {
         status: 'success',
@@ -116,8 +116,8 @@ describe('SessionIndexPage', () => {
     ])
     expect(screen.getAllByText('一部欠損あり')).toHaveLength(1)
     expect(screen.getByText('時刻不明')).toBeInTheDocument()
-    expect(screen.getByText('作業コンテキスト不明')).toBeInTheDocument()
-    expect(screen.getByText('モデル不明')).toBeInTheDocument()
+    expect(screen.queryByText('作業コンテキスト不明')).not.toBeInTheDocument()
+    expect(screen.queryByText('モデル不明')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'session-b を開く' })).toHaveAttribute(
       'href',
       '/sessions/session-b',

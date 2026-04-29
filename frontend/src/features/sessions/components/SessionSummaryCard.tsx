@@ -2,11 +2,9 @@ import { Link } from 'react-router'
 
 import type { SessionSummary } from '../api/sessionApi.types.ts'
 import {
+  buildSessionMetadataItems,
   formatDegradedLabel,
-  formatModel,
   formatSourceStateLabel,
-  formatTimestamp,
-  formatWorkContext,
 } from '../presentation/formatters.ts'
 
 interface SessionSummaryCardProps {
@@ -17,6 +15,11 @@ function SessionSummaryCard({ session }: SessionSummaryCardProps) {
   const conversationLabel = session.conversation_summary.has_conversation
     ? '会話あり'
     : 'metadata-only'
+  const metadataItems = buildSessionMetadataItems({
+    updatedAt: session.updated_at,
+    workContext: session.work_context,
+    selectedModel: session.selected_model,
+  })
 
   return (
     <article className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-slate-950/20">
@@ -61,26 +64,18 @@ function SessionSummaryCard({ session }: SessionSummaryCardProps) {
             </div>
           </div>
 
-          <dl className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
-            <div>
-              <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                更新日時
-              </dt>
-              <dd className="mt-1">{formatTimestamp(session.updated_at)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                作業コンテキスト
-              </dt>
-              <dd className="mt-1">{formatWorkContext(session.work_context)}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                モデル
-              </dt>
-              <dd className="mt-1">{formatModel(session.selected_model)}</dd>
-            </div>
-          </dl>
+          {metadataItems.length > 0 ? (
+            <dl className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
+              {metadataItems.map((item) => (
+                <div key={item.label}>
+                  <dt className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    {item.label}
+                  </dt>
+                  <dd className="mt-1">{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
         </div>
 
         <div className="shrink-0">

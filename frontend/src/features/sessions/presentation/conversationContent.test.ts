@@ -51,8 +51,8 @@ describe('formatConversationEntryContent', () => {
           argumentsPreview: '{"command":"pwd"}',
           isTruncated: false,
           status: 'complete',
-          argumentsDefaultCollapsed: false,
-          collapseReason: 'none',
+          argumentsDefaultCollapsed: true,
+          collapseReason: 'arguments_preview',
         },
       ],
     })
@@ -120,7 +120,7 @@ describe('formatConversationEntryContent', () => {
     })
   })
 
-  it('collapses multiline and truncated arguments while keeping short single-line arguments open', () => {
+  it('collapses every tool arguments preview by default while preserving the collapse reason', () => {
     expect(
       formatConversationEntryContent(
         buildEntry({
@@ -141,6 +141,12 @@ describe('formatConversationEntryContent', () => {
             {
               name: 'functions.exec_command',
               arguments_preview: '{"command":"pwd"}',
+              is_truncated: false,
+              status: 'complete',
+            },
+            {
+              name: 'functions.exec_command',
+              arguments_preview: null,
               is_truncated: false,
               status: 'complete',
             },
@@ -170,6 +176,15 @@ describe('formatConversationEntryContent', () => {
         kind: 'tool_hint',
         name: 'functions.exec_command',
         argumentsPreview: '{"command":"pwd"}',
+        isTruncated: false,
+        status: 'complete',
+        argumentsDefaultCollapsed: true,
+        collapseReason: 'arguments_preview',
+      },
+      {
+        kind: 'tool_hint',
+        name: 'functions.exec_command',
+        argumentsPreview: null,
         isTruncated: false,
         status: 'complete',
         argumentsDefaultCollapsed: false,
