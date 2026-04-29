@@ -4,7 +4,7 @@ RSpec.describe CopilotHistory::Projections::ConversationProjector, :copilot_hist
   subject(:projector) { described_class.new }
 
   describe "#call" do
-    it "projects only non-empty user and assistant messages in source sequence order" do
+    it "projects user and assistant messages with content or tool calls in source sequence order" do
       with_copilot_history_fixture("current_schema_valid") do |root|
         session = read_first_current_session(root)
 
@@ -13,11 +13,12 @@ RSpec.describe CopilotHistory::Projections::ConversationProjector, :copilot_hist
         expect(projection.entries.map { |entry| [ entry.sequence, entry.role, entry.content ] }).to eq(
           [
             [ 2, "user", "show recent sessions" ],
-            [ 4, "assistant", "I can inspect the latest sessions." ]
+            [ 4, "assistant", "I can inspect the latest sessions." ],
+            [ 5, "assistant", "" ]
           ]
         )
         expect(projection.entries.last.tool_calls.map(&:name)).to eq([ "functions.bash" ])
-        expect(projection.message_count).to eq(2)
+        expect(projection.message_count).to eq(3)
         expect(projection.empty_reason).to be_nil
       end
     end
@@ -100,6 +101,25 @@ RSpec.describe CopilotHistory::Projections::ConversationProjector, :copilot_hist
       )
 
       expect(projector.call(session).empty_reason).to eq("events_unavailable")
+    end
+
+    it "projects tool-only user and assistant messages from the shared current model fixture" do
+      with_copilot_history_fixture("current_model") do |root|
+        session = read_session(root, "current-model-with-values")
+
+        projection = projector.call(session)
+        tool_only_entries = projection.entries.select { |entry| entry.content.to_s.empty? && entry.tool_calls.any? }
+
+        expect(tool_only_entries.map { |entry| [ entry.role, entry.tool_calls.first.name ] }).to eq(
+          [
+            [ "assistant", "skill-context" ],
+            [ "user", "functions.submit_feedback" ]
+          ]
+        )
+        expect(tool_only_entries.map(&:degraded)).to eq([ false, false ])
+        expect(tool_only_entries.map(&:issues)).to eq([ [], [] ])
+        expect(tool_only_entries.first.tool_calls.first.arguments_preview).to include("long skill context")
+      end
     end
   end
 

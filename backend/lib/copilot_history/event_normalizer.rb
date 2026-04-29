@@ -265,7 +265,7 @@ module CopilotHistory
     end
 
     def missing_required_current_content?(raw_type:, content:, tool_calls:)
-      return false if raw_type == "assistant.message" && content.nil? && tool_calls.any?
+      return false if %w[user.message assistant.message].include?(raw_type) && content.nil? && tool_calls.any?
 
       content.nil?
     end

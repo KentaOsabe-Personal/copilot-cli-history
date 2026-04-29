@@ -1,7 +1,7 @@
 # Implementation Plan
 
 - [ ] 1. 実装前提となる検証データと表示ケースを固める
-- [ ] 1.1 current 形式のモデル抽出と tool-only 会話を検証できる backend 側の fixture を用意する
+- [x] 1.1 current 形式のモデル抽出と tool-only 会話を検証できる backend 側の fixture を用意する
   - モデル値を持つ current 形式、モデル値を持たない current 形式、tool call だけを持つ user / assistant event を含む履歴ケースを用意する
   - 空文字、空白、非文字列のモデル候補が採用されないことを確認できる入力を含める
   - 完了時には backend の reader / projector / request spec から同じ fixture を参照して、モデル抽出と tool-only 会話の期待値を検証できる
