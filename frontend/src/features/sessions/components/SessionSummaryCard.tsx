@@ -4,6 +4,7 @@ import type { SessionSummary } from '../api/sessionApi.types.ts'
 import {
   formatDegradedLabel,
   formatModel,
+  formatSourceStateLabel,
   formatTimestamp,
   formatWorkContext,
 } from '../presentation/formatters.ts'
@@ -13,12 +14,25 @@ interface SessionSummaryCardProps {
 }
 
 function SessionSummaryCard({ session }: SessionSummaryCardProps) {
+  const conversationLabel = session.conversation_summary.has_conversation
+    ? '会話あり'
+    : 'metadata-only'
+
   return (
     <article className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-slate-950/20">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="font-mono text-lg font-semibold text-cyan-200">{session.id}</h3>
+            <span
+              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                session.conversation_summary.has_conversation
+                  ? 'bg-cyan-400/15 text-cyan-100 ring-1 ring-cyan-300/20'
+                  : 'bg-slate-700 text-slate-100 ring-1 ring-slate-600'
+              }`}
+            >
+              {conversationLabel}
+            </span>
             <span
               className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
                 session.degraded
@@ -28,6 +42,23 @@ function SessionSummaryCard({ session }: SessionSummaryCardProps) {
             >
               {formatDegradedLabel(session.degraded)}
             </span>
+            <span className="inline-flex rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-200 ring-1 ring-slate-700">
+              {formatSourceStateLabel(session.source_state)}
+            </span>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-slate-700/70 bg-slate-950/30 p-4">
+            <p className="text-sm font-medium text-white">
+              {session.conversation_summary.preview ?? '表示できる会話本文はありません'}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-300">
+              <span className="rounded-full bg-slate-800 px-2.5 py-1">
+                {`${session.conversation_summary.message_count} 件の会話`}
+              </span>
+              <span className="rounded-full bg-slate-800 px-2.5 py-1">
+                {`${session.conversation_summary.activity_count} 件の内部 activity`}
+              </span>
+            </div>
           </div>
 
           <dl className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">

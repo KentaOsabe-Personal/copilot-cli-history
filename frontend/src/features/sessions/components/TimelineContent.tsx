@@ -2,7 +2,7 @@ import type { SessionTimelineEvent } from '../api/sessionApi.types.ts'
 import { formatTimelineContent } from '../presentation/timelineContent.ts'
 
 interface TimelineContentProps {
-  event: SessionTimelineEvent
+  event: Pick<SessionTimelineEvent, 'content' | 'tool_calls' | 'detail'>
 }
 
 function TimelineContent({ event }: TimelineContentProps) {

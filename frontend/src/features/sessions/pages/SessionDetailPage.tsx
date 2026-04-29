@@ -1,8 +1,9 @@
 import { useParams } from 'react-router'
 
+import ActivityTimeline from '../components/ActivityTimeline.tsx'
+import ConversationTranscript from '../components/ConversationTranscript.tsx'
 import IssueList from '../components/IssueList.tsx'
 import SessionDetailHeader from '../components/SessionDetailHeader.tsx'
-import SessionTimeline from '../components/SessionTimeline.tsx'
 import StatusPanel from '../components/StatusPanel.tsx'
 import { useSessionDetail } from '../hooks/useSessionDetail.ts'
 
@@ -13,7 +14,7 @@ function SessionDetailPage() {
     throw new Error('sessionId route param is required')
   }
 
-  const { state } = useSessionDetail(sessionId)
+  const { state, requestRaw } = useSessionDetail(sessionId)
 
   return (
     <section className="flex flex-col gap-6">
@@ -50,7 +51,13 @@ function SessionDetailPage() {
         <>
           <SessionDetailHeader detail={state.detail} />
           <IssueList title="セッションの issue" issues={state.detail.issues} />
-          <SessionTimeline timeline={state.detail.timeline} />
+          <ConversationTranscript conversation={state.detail.conversation} />
+          <ActivityTimeline
+            activity={state.detail.activity}
+            rawIncluded={state.detail.raw_included}
+            rawStatus={state.rawStatus}
+            onRequestRaw={requestRaw}
+          />
         </>
       ) : null}
     </section>

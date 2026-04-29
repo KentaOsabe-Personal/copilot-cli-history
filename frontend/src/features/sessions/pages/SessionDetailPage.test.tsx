@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -11,6 +12,7 @@ vi.mock('../hooks/useSessionDetail.ts', () => ({
 }))
 
 const mockedUseSessionDetail = vi.mocked(useSessionDetail)
+const requestRaw = vi.fn()
 
 function buildDetail(overrides: Partial<SessionDetail> = {}): SessionDetail {
   return {
@@ -197,6 +199,7 @@ function renderDetailPage(initialEntry = '/sessions/session-123') {
 describe('SessionDetailPage', () => {
   beforeEach(() => {
     mockedUseSessionDetail.mockReset()
+    requestRaw.mockReset()
   })
 
   it('renders a loading panel while the detail is being fetched', () => {
@@ -205,6 +208,7 @@ describe('SessionDetailPage', () => {
         status: 'loading',
         sessionId: 'session-123',
       },
+      requestRaw,
     })
 
     renderDetailPage()
@@ -218,8 +222,10 @@ describe('SessionDetailPage', () => {
       state: {
         status: 'success',
         sessionId: 'session-123',
+        rawStatus: 'idle',
         detail: buildDetail(),
       },
+      requestRaw,
     })
 
     renderDetailPage()
@@ -230,13 +236,14 @@ describe('SessionDetailPage', () => {
     expect(screen.getByText('session timeline is incomplete')).toBeInTheDocument()
     expect(screen.getAllByText('警告').length).toBeGreaterThan(0)
     expect(screen.getByText('セッション全体')).toBeInTheDocument()
-    expect(screen.getByText('message')).toBeInTheDocument()
-    expect(screen.getAllByText('assistant')).toHaveLength(1)
-    expect(screen.getByText('イベント #1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '会話' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '内部 activity' })).toBeInTheDocument()
+    expect(screen.getByText('assistant')).toBeInTheDocument()
+    expect(screen.queryByText('イベント #1')).not.toBeInTheDocument()
     expect(screen.getByText('説明です')).toBeInTheDocument()
     expect(screen.getByText('const answer = 42')).toBeInTheDocument()
     expect(screen.getByText('functions.bash')).toBeInTheDocument()
-    expect(screen.getByText('詳細イベント')).toBeInTheDocument()
+    expect(screen.getAllByText('詳細イベント').length).toBeGreaterThan(0)
     expect(screen.getAllByText('tool.execution_start').length).toBeGreaterThan(0)
     expect(screen.getByText('functions.bash / tool-1')).toBeInTheDocument()
     expect(screen.getByText('event payload is partial')).toBeInTheDocument()
@@ -247,21 +254,26 @@ describe('SessionDetailPage', () => {
       state: {
         status: 'success',
         sessionId: 'session-123',
+        rawStatus: 'idle',
         detail: buildDetail(),
       },
+      requestRaw,
     })
 
     renderDetailPage()
 
-    expect(screen.getAllByRole('heading', { level: 4 }).map((node) => node.textContent)).toEqual([
-      'イベント #1',
-      'イベント #2',
-      'イベント #3',
+    const activitySection = screen.getByRole('heading', { name: '内部 activity' }).closest('section')
+
+    expect(activitySection).not.toBeNull()
+    expect(
+      within(activitySection as HTMLElement).getAllByRole('heading', { level: 4 }).map((node) => node.textContent),
+    ).toEqual([
+      'Activity #2',
+      'Activity #3',
     ])
-    expect(screen.getByText('message')).toBeInTheDocument()
-    expect(screen.getByText('detail')).toBeInTheDocument()
+    expect(screen.queryByText('message')).not.toBeInTheDocument()
     expect(screen.getByText('partial')).toBeInTheDocument()
-    expect(screen.getByText('unknown')).toBeInTheDocument()
+    expect(screen.getAllByText('unknown').length).toBeGreaterThan(0)
     expect(screen.getByText('const answer = 42')).toBeInTheDocument()
     expect(screen.getByText('functions.bash')).toBeInTheDocument()
     expect(screen.getByText('functions.bash / tool-1')).toBeInTheDocument()
@@ -274,11 +286,36 @@ describe('SessionDetailPage', () => {
       state: {
         status: 'success',
         sessionId: 'legacy-session-123',
+        rawStatus: 'idle',
         detail: buildDetail({
           id: 'legacy-session-123',
           source_format: 'legacy',
           degraded: false,
           issues: [],
+          conversation: {
+            entries: [
+              {
+                sequence: 1,
+                role: 'assistant',
+                content: 'legacy transcript remains readable',
+                occurred_at: '2026-04-26T08:59:00Z',
+                tool_calls: [],
+                degraded: false,
+                issues: [],
+              },
+            ],
+            message_count: 1,
+            empty_reason: null,
+            summary: {
+              has_conversation: true,
+              message_count: 1,
+              preview: 'legacy transcript remains readable',
+              activity_count: 0,
+            },
+          },
+          activity: {
+            entries: [],
+          },
           timeline: [
             {
               sequence: 1,
@@ -299,13 +336,13 @@ describe('SessionDetailPage', () => {
           ],
         }),
       },
+      requestRaw,
     })
 
     renderDetailPage('/sessions/legacy-session-123')
 
     expect(screen.getAllByText('legacy-session-123').length).toBeGreaterThan(0)
     expect(screen.getByText('正常')).toBeInTheDocument()
-    expect(screen.getByText('message')).toBeInTheDocument()
     expect(screen.getByText('assistant')).toBeInTheDocument()
     expect(screen.getByText('legacy transcript remains readable')).toBeInTheDocument()
     expect(screen.queryByText('partial')).not.toBeInTheDocument()
@@ -318,6 +355,7 @@ describe('SessionDetailPage', () => {
         status: 'not_found',
         sessionId: 'missing-session',
       },
+      requestRaw,
     })
 
     renderDetailPage('/sessions/missing-session')
@@ -341,11 +379,81 @@ describe('SessionDetailPage', () => {
           },
         },
       },
+      requestRaw,
     })
 
     renderDetailPage()
 
     expect(screen.getByRole('heading', { name: 'セッション詳細を表示できません' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'セッション一覧へ戻る' })).toHaveAttribute('href', '/')
+  })
+
+  it('renders an explicit empty conversation state instead of filling the main area with activity', () => {
+    mockedUseSessionDetail.mockReturnValue({
+      state: {
+        status: 'success',
+        sessionId: 'session-123',
+        rawStatus: 'idle',
+        detail: buildDetail({
+          conversation: {
+            entries: [],
+            message_count: 0,
+            empty_reason: 'no_conversation_messages',
+            summary: {
+              has_conversation: false,
+              message_count: 0,
+              preview: null,
+              activity_count: 2,
+            },
+          },
+        }),
+      },
+      requestRaw,
+    })
+
+    renderDetailPage()
+
+    const conversationSection = screen.getByRole('heading', { name: '会話' }).closest('section')
+
+    expect(conversationSection).not.toBeNull()
+    expect(within(conversationSection as HTMLElement).getAllByText('表示できる会話本文はありません').length).toBeGreaterThan(0)
+    expect(within(conversationSection as HTMLElement).queryByText('functions.bash / tool-1')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '内部 activity' })).toBeInTheDocument()
+  })
+
+  it('requests raw detail only from the explicit raw action and keeps raw status visible', async () => {
+    const user = userEvent.setup()
+
+    mockedUseSessionDetail.mockReturnValue({
+      state: {
+        status: 'success',
+        sessionId: 'session-123',
+        rawStatus: 'idle',
+        detail: buildDetail(),
+      },
+      requestRaw,
+    })
+
+    renderDetailPage()
+
+    await user.click(screen.getByRole('button', { name: 'Raw を取得' }))
+
+    expect(requestRaw).toHaveBeenCalledTimes(1)
+
+    mockedUseSessionDetail.mockReturnValue({
+      state: {
+        status: 'success',
+        sessionId: 'session-123',
+        rawStatus: 'included',
+        detail: buildDetail({
+          raw_included: true,
+        }),
+      },
+      requestRaw,
+    })
+
+    renderDetailPage()
+
+    expect(screen.getByText('raw included')).toBeInTheDocument()
   })
 })

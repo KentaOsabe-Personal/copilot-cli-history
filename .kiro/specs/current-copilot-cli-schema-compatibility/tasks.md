@@ -110,29 +110,29 @@
   - _Requirements: 2.4, 3.1, 3.2, 3.3, 3.4, 4.4, 8.3_
   - _Boundary: Activity timeline presentation helper_
 
-- [ ] 6. Frontend: session list と detail UI を conversation-first へ接続する
-- [ ] 6.1 SessionSummaryCard で会話あり session を選びやすくする
+- [x] 6. Frontend: session list と detail UI を conversation-first へ接続する
+- [x] 6.1 SessionSummaryCard で会話あり session を選びやすくする
   - 会話有無、会話数、preview、source state、degraded 状態、補正済み更新時刻を一覧カードで表示する。
   - workspace-only session は通常会話 session と区別できる見え方にする。
   - 完了時には session list から会話本文を持つ session と metadata-only session を判別して選べる。
   - _Depends: 5.1_
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 6.4_
 
-- [ ] 6.2 ConversationTranscript を detail 画面の主表示にする
+- [x] 6.2 ConversationTranscript を detail 画面の主表示にする
   - detail 画面で user / assistant の会話を最初の主 content section として表示する。
   - conversation が空の場合は表示できる会話本文がないことを明示し、activity や raw payload の量で主表示を埋めない。
   - 完了時には detail 画面を開いた直後に会話履歴または会話なし状態が読める。
   - _Depends: 5.2_
   - _Requirements: 2.1, 2.2, 2.3, 2.5, 7.1_
 
-- [ ] 6.3 ActivityTimeline と issue 表示を secondary section として接続する
+- [x] 6.3 ActivityTimeline と issue 表示を secondary section として接続する
   - internal activity、unknown event、partial mapping、event issue を主会話の下で控えめに確認できるようにする。
   - raw 明示 action 後だけ raw payload を詳細として参照できる状態にする。
   - 完了時には利用者が読める範囲と信頼できない範囲を detail 画面上で判断できる。
   - _Depends: 5.3, 6.2_
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 4.4, 7.2, 7.4, 8.3_
 
-- [ ] 6.4 session detail hook で通常 detail と raw 明示 detail の状態遷移を扱う
+- [x] 6.4 session detail hook で通常 detail と raw 明示 detail の状態遷移を扱う
   - 初回は通常 detail を取得し、raw 明示 action が呼ばれた場合だけ raw 付き detail を再取得する。
   - loading、error、not found、raw included の状態が既存 detail 画面の制御と矛盾しないようにする。
   - 完了時には raw 明示 action 後も同じ detail page で conversation / activity / timeline が維持される。
