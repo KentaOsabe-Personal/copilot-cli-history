@@ -7,7 +7,7 @@
   - 完了時には backend の reader / projector / request spec から同じ fixture を参照して、モデル抽出と tool-only 会話の期待値を検証できる
   - _Requirements: 3.1, 3.3, 3.5, 4.3, 5.2, 5.4, 5.5_
 
-- [ ] 1.2 frontend の一覧、詳細、tool、activity 表示を検証できる session データを整える
+- [x] 1.2 frontend の一覧、詳細、tool、activity 表示を検証できる session データを整える
   - work context と model があるケース、欠損するケース、metadata-only / workspace-only / degraded の例外ケースを揃える
   - session issue、発話近傍 issue、tool call、skill-context、activity を別々に検証できる入力を揃える
   - 完了時には UI テストが保存形式ではなく実データの有無に基づく表示差分を assertion できる
