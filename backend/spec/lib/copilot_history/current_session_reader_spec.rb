@@ -15,7 +15,7 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
             repository: "octo/example",
             branch: "main",
             created_at: "2026-04-26T09:00:00Z",
-            updated_at: "2026-04-26T09:05:00Z",
+            updated_at: "2026-04-26T09:00:02Z",
             selected_model: nil,
             events: [
               CopilotHistory::Types::NormalizedEvent.new(
@@ -157,6 +157,23 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
       end
     end
 
+    it "falls back to events.jsonl mtime when readable current events do not contain timestamps" do
+      with_copilot_history_fixture("current_valid") do |root|
+        events_path = root.join("session-state/current-valid/events.jsonl")
+        events_path.write(<<~JSONL)
+          {"type":"user_message","role":"user","content":"show recent sessions"}
+          {"type":"assistant_message","role":"assistant","content":"Here are the latest sessions."}
+        JSONL
+        File.utime(Time.utc(2026, 4, 26, 9, 3, 0), Time.utc(2026, 4, 26, 9, 3, 0), events_path)
+
+        session = described_class.new.call(build_source(root, "current-valid"))
+
+        expect(session.updated_at).to eq(Time.iso8601("2026-04-26T09:03:00Z"))
+        expect(session.source_state).to eq(:degraded)
+        expect(session.events.map(&:sequence)).to eq([ 1, 2 ])
+      end
+    end
+
     it "returns a session issue when workspace.yaml is unreadable but still keeps readable events" do
       with_copilot_history_fixture("current_unreadable") do |root|
         workspace_path = root.join("session-state/current-unreadable/workspace.yaml")
@@ -202,6 +219,136 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
             ]
           )
         end
+      end
+    end
+
+    it "normalizes current dotted schema fixtures into message, detail, and unknown events with helper fields" do
+      with_copilot_history_fixture("current_schema_valid") do |root|
+        session = described_class.new.call(build_source(root, "current-schema-valid"))
+
+        expect(session.source_state).to eq(:complete)
+        expect(session.updated_at).to eq(Time.iso8601("2026-04-28T01:00:09Z"))
+        expect(session.events.map { |event| [ event.sequence, event.kind, event.mapping_status, event.raw_type ] }).to eq(
+          [
+            [ 1, :message, :complete, "system.message" ],
+            [ 2, :message, :complete, "user.message" ],
+            [ 3, :detail, :complete, "assistant.turn_start" ],
+            [ 4, :message, :complete, "assistant.message" ],
+            [ 5, :message, :complete, "assistant.message" ],
+            [ 6, :detail, :complete, "tool.execution_start" ],
+            [ 7, :detail, :complete, "tool.execution_complete" ],
+            [ 8, :detail, :complete, "skill.invoked" ],
+            [ 9, :detail, :complete, "assistant.turn_end" ]
+          ]
+        )
+        expect(session.events.fetch(3).tool_calls).to eq(
+          [
+            CopilotHistory::Types::NormalizedToolCall.new(
+              name: "functions.bash",
+              arguments_preview: "{\"command\":\"git --no-pager status\",\"description\":\"Inspect repository status\"}",
+              is_truncated: false,
+              status: :complete
+            )
+          ]
+        )
+        expect(session.events.fetch(4).content).to be_nil
+        expect(session.events.fetch(4).tool_calls).to eq(
+          [
+            CopilotHistory::Types::NormalizedToolCall.new(
+              name: "functions.bash",
+              arguments_preview: "{\"command\":\"pwd\"}",
+              is_truncated: false,
+              status: :complete
+            )
+          ]
+        )
+        expect(session.events.fetch(7).detail).to eq(
+          category: "skill",
+          title: "skill.invoked",
+          body: "kiro-review / functions.skill"
+        )
+        expect(session.events.fetch(2).detail).to eq(
+          category: "assistant_turn",
+          title: "assistant.turn_start",
+          body: "turn-1"
+        )
+        expect(session.issues).to eq([])
+      end
+    end
+
+    it "keeps readable current dotted events while surfacing partial tool summaries, unknown events, and invalid jsonl lines" do
+      with_copilot_history_fixture("current_schema_degraded") do |root|
+        session = described_class.new.call(build_source(root, "current-schema-degraded"))
+
+        expect(session.source_state).to eq(:degraded)
+        expect(session.updated_at).to eq(Time.iso8601("2026-04-28T02:00:04Z"))
+        expect(session.events.map { |event| [ event.sequence, event.kind, event.mapping_status, event.raw_type ] }).to eq(
+          [
+            [ 1, :message, :complete, "user.message" ],
+            [ 2, :message, :partial, "assistant.message" ],
+            [ 3, :detail, :complete, "hook.start" ],
+            [ 4, :unknown, :complete, "mystery.event" ]
+          ]
+        )
+        expect(session.events.fetch(1).tool_calls).to eq(
+          [
+            CopilotHistory::Types::NormalizedToolCall.new(
+              name: nil,
+              arguments_preview: "{\"command\":\"printenv\",\"token\":\"[REDACTED]\"}",
+              is_truncated: false,
+              status: :partial
+            )
+          ]
+        )
+        expect(session.events.fetch(2).detail).to eq(
+          category: "hook",
+          title: "hook.start",
+          body: "before-tool / *"
+        )
+        expect(session.issues).to include(
+          CopilotHistory::Types::ReadIssue.new(
+            code: CopilotHistory::Errors::ReadErrorCode::EVENT_PARTIAL_MAPPING,
+            message: "event payload matched partially",
+            source_path: root.join("session-state/current-schema-degraded/events.jsonl"),
+            sequence: 2,
+            severity: :warning
+          ),
+          CopilotHistory::Types::ReadIssue.new(
+            code: CopilotHistory::Errors::ReadErrorCode::EVENT_UNKNOWN_SHAPE,
+            message: "event payload could not be mapped to canonical fields",
+            source_path: root.join("session-state/current-schema-degraded/events.jsonl"),
+            sequence: 4,
+            severity: :warning
+          ),
+          CopilotHistory::Types::ReadIssue.new(
+            code: CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENT_PARSE_FAILED,
+            message: "events.jsonl line could not be parsed",
+            source_path: root.join("session-state/current-schema-degraded/events.jsonl"),
+            sequence: 5,
+            severity: :error
+          )
+        )
+      end
+    end
+
+    it "marks workspace-only current sessions with a dedicated issue when events.jsonl is missing" do
+      with_copilot_history_fixture("current_schema_workspace_only") do |root|
+        session = described_class.new.call(build_source(root, "current-schema-workspace-only"))
+
+        expect(session.session_id).to eq("current-schema-workspace-only")
+        expect(session.source_state).to eq(:workspace_only)
+        expect(session.updated_at).to eq(Time.iso8601("2026-04-28T03:01:00Z"))
+        expect(session.events).to eq([])
+        expect(session.issues).to eq(
+          [
+            CopilotHistory::Types::ReadIssue.new(
+              code: CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_MISSING,
+              message: "events.jsonl is missing for current session",
+              source_path: root.join("session-state/current-schema-workspace-only/events.jsonl"),
+              severity: :warning
+            )
+          ]
+        )
       end
     end
 

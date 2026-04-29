@@ -14,6 +14,15 @@ export interface SessionIssue {
   event_sequence: number | null
 }
 
+export type SessionSourceState = 'complete' | 'workspace_only' | 'degraded'
+
+export interface SessionConversationSummary {
+  has_conversation: boolean
+  message_count: number
+  preview: string | null
+  activity_count: number
+}
+
 export interface SessionSummary {
   id: string
   source_format: string
@@ -21,8 +30,10 @@ export interface SessionSummary {
   updated_at: string | null
   work_context: WorkContext
   selected_model: string | null
+  source_state: SessionSourceState
   event_count: number
   message_snapshot_count: number
+  conversation_summary: SessionConversationSummary
   degraded: boolean
   issues: readonly SessionIssue[]
 }
@@ -43,16 +54,80 @@ export interface SessionMessageSnapshot {
   raw_payload: unknown
 }
 
+export type SessionTimelineKind = 'message' | 'detail' | 'unknown'
+
+export type SessionTimelineMappingStatus = 'complete' | 'partial'
+
+export type SessionToolCallStatus = 'complete' | 'partial'
+
+export interface SessionTimelineToolCall {
+  name: string | null
+  arguments_preview: string | null
+  is_truncated: boolean
+  status: SessionToolCallStatus
+}
+
+export interface SessionTimelineDetail {
+  category: string
+  title: string
+  body: string | null
+}
+
 export interface SessionTimelineEvent {
   sequence: number
-  kind: string
+  kind: SessionTimelineKind
+  mapping_status: SessionTimelineMappingStatus
   raw_type: string | null
   occurred_at: string | null
   role: string | null
   content: string | null
+  tool_calls: readonly SessionTimelineToolCall[]
+  detail: SessionTimelineDetail | null
   raw_payload: unknown
   degraded: boolean
   issues: readonly SessionIssue[]
+}
+
+export type SessionConversationEmptyReason =
+  | 'no_events'
+  | 'no_conversation_messages'
+  | 'events_unavailable'
+  | null
+
+export interface SessionConversationEntry {
+  sequence: number
+  role: 'user' | 'assistant'
+  content: string
+  occurred_at: string | null
+  tool_calls: readonly SessionTimelineToolCall[]
+  degraded: boolean
+  issues: readonly SessionIssue[]
+}
+
+export interface SessionConversation {
+  entries: readonly SessionConversationEntry[]
+  message_count: number
+  empty_reason: SessionConversationEmptyReason
+  summary: SessionConversationSummary
+}
+
+export interface SessionActivityEntry {
+  sequence: number
+  category: string
+  title: string
+  summary: string | null
+  raw_type: string | null
+  mapping_status: SessionTimelineMappingStatus
+  occurred_at: string | null
+  source_path: string | null
+  raw_available: boolean
+  raw_payload: unknown
+  degraded: boolean
+  issues: readonly SessionIssue[]
+}
+
+export interface SessionActivity {
+  entries: readonly SessionActivityEntry[]
 }
 
 export interface SessionDetail {
@@ -62,9 +137,13 @@ export interface SessionDetail {
   updated_at: string | null
   work_context: WorkContext
   selected_model: string | null
+  source_state: SessionSourceState
   degraded: boolean
+  raw_included: boolean
   issues: readonly SessionIssue[]
   message_snapshots: readonly SessionMessageSnapshot[]
+  conversation: SessionConversation
+  activity: SessionActivity
   timeline: readonly SessionTimelineEvent[]
 }
 
@@ -124,6 +203,10 @@ export type SessionApiResult<T> =
 export interface SessionApiClient {
   fetchSessionIndex(signal?: AbortSignal): Promise<SessionApiResult<SessionIndexResponse>>
   fetchSessionDetail(
+    sessionId: string,
+    signal?: AbortSignal,
+  ): Promise<SessionApiResult<SessionDetailResponse>>
+  fetchSessionDetailWithRaw(
     sessionId: string,
     signal?: AbortSignal,
   ): Promise<SessionApiResult<SessionDetailResponse>>

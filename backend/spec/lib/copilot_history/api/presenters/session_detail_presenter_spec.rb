@@ -42,7 +42,7 @@ RSpec.describe CopilotHistory::Api::Presenters::SessionDetailPresenter do
             ),
             build_event(
               sequence: 2,
-              kind: :partial,
+              mapping_status: :partial,
               raw_type: "assistant_message",
               occurred_at: nil,
               role: "assistant",
@@ -68,8 +68,9 @@ RSpec.describe CopilotHistory::Api::Presenters::SessionDetailPresenter do
         )
       )
 
-      expect(presenter.call(result: result)).to eq(
-        data: {
+      payload = presenter.call(result: result).fetch(:data)
+
+      expect(payload).to include(
           id: "legacy-mixed",
           source_format: "legacy",
           created_at: "2026-04-26T07:50:00Z",
@@ -81,7 +82,9 @@ RSpec.describe CopilotHistory::Api::Presenters::SessionDetailPresenter do
             branch: nil
           },
           selected_model: "gpt-5.4",
+          source_state: "complete",
           degraded: true,
+          raw_included: false,
           issues: [
             {
               code: "legacy.json_parse_failed",
@@ -96,38 +99,77 @@ RSpec.describe CopilotHistory::Api::Presenters::SessionDetailPresenter do
             {
               role: "assistant",
               content: "legacy mixed transcript",
-              raw_payload: { "role" => "assistant", "content" => "legacy mixed transcript" }
+              raw_payload: nil
             }
           ],
+          conversation: {
+            entries: [
+              {
+                sequence: 1,
+                role: "assistant",
+                content: "legacy mixed event",
+                occurred_at: "2026-04-26T07:50:01Z",
+                tool_calls: [],
+                degraded: false,
+                issues: []
+              },
+              {
+                sequence: 2,
+                role: "assistant",
+                content: "legacy partial event",
+                occurred_at: nil,
+                tool_calls: [],
+                degraded: true,
+                issues: [
+                  {
+                    code: "event.partial_mapping",
+                    severity: "warning",
+                    message: "event payload matched partially",
+                    source_path: "/tmp/copilot/history-session-state/legacy-mixed.json",
+                    scope: "event",
+                    event_sequence: 2
+                  }
+                ]
+              }
+            ],
+            message_count: 2,
+            empty_reason: nil,
+            summary: {
+              has_conversation: true,
+              message_count: 2,
+              preview: "legacy mixed event",
+              activity_count: 0
+            }
+          },
+          activity: {
+            entries: []
+          },
           timeline: [
             {
               sequence: 1,
               kind: "message",
+              mapping_status: "complete",
               raw_type: "assistant_message",
               occurred_at: "2026-04-26T07:50:01Z",
               role: "assistant",
               content: "legacy mixed event",
-              raw_payload: {
-                "type" => "assistant_message",
-                "role" => "assistant",
-                "content" => "legacy mixed event",
-                "timestamp" => "2026-04-26T07:50:01Z"
-              },
+              tool_calls: [],
+              detail: nil,
+              raw_payload: nil,
               degraded: false,
               issues: []
             },
             {
               sequence: 2,
-              kind: "partial",
+              kind: "message",
+              mapping_status: "partial",
               raw_type: "assistant_message",
               occurred_at: nil,
               role: "assistant",
               content: "legacy partial event",
-              raw_payload: {
-                "type" => "assistant_message",
-                "role" => "assistant",
-                "content" => "legacy partial event"
-              },
+              tool_calls: [],
+              detail: nil,
+              raw_payload: nil,
               degraded: true,
               issues: [
                 {
@@ -141,7 +183,6 @@ RSpec.describe CopilotHistory::Api::Presenters::SessionDetailPresenter do
               ]
             }
           ]
-        }
       )
     end
 
@@ -170,6 +211,302 @@ RSpec.describe CopilotHistory::Api::Presenters::SessionDetailPresenter do
 
       expect(presenter.call(result: result).dig(:data, :message_snapshots)).to eq([])
     end
+
+    it "maps current detail into conversation, activity, timeline, and omits raw payloads by default" do
+      result = CopilotHistory::Api::Types::SessionLookupResult::Found.new(
+        root: build_root,
+        session: CopilotHistory::Types::NormalizedSession.new(
+          session_id: "current-schema-valid",
+          source_format: :current,
+          created_at: "2026-04-28T01:00:00Z",
+          updated_at: "2026-04-28T01:02:00Z",
+          selected_model: nil,
+          events: [
+            build_event(
+              sequence: 1,
+              raw_type: "assistant.message",
+              occurred_at: "2026-04-28T01:00:04Z",
+              role: "assistant",
+              content: "I can inspect the latest sessions.",
+              tool_calls: [
+                CopilotHistory::Types::NormalizedToolCall.new(
+                  name: "functions.bash",
+                  arguments_preview: "{\"command\":\"git --no-pager status\"}",
+                  is_truncated: false,
+                  status: :complete
+                )
+              ]
+            ),
+            build_event(
+              sequence: 2,
+              kind: :detail,
+              raw_type: "tool.execution_start",
+              occurred_at: "2026-04-28T01:00:05Z",
+              detail: {
+                category: "tool_execution",
+                title: "tool.execution_start",
+                body: "functions.bash / tool-1"
+              },
+              raw_payload: {
+                "type" => "tool.execution_start"
+              }
+            )
+          ],
+          message_snapshots: [],
+          issues: [],
+          source_paths: {
+            workspace: "/tmp/copilot/session-state/current-schema-valid/workspace.yaml",
+            events: "/tmp/copilot/session-state/current-schema-valid/events.jsonl"
+          }
+        )
+      )
+
+      payload = presenter.call(result: result).fetch(:data)
+
+      expect(payload.fetch(:raw_included)).to eq(false)
+      expect(payload.fetch(:conversation)).to eq(
+        {
+          entries: [
+            {
+              sequence: 1,
+              role: "assistant",
+              content: "I can inspect the latest sessions.",
+              occurred_at: "2026-04-28T01:00:04Z",
+              tool_calls: [
+                {
+                  name: "functions.bash",
+                  arguments_preview: "{\"command\":\"git --no-pager status\"}",
+                  is_truncated: false,
+                  status: "complete"
+                }
+              ],
+              degraded: false,
+              issues: []
+            }
+          ],
+          message_count: 1,
+          empty_reason: nil,
+          summary: {
+            has_conversation: true,
+            message_count: 1,
+            preview: "I can inspect the latest sessions.",
+            activity_count: 1
+          }
+        }
+      )
+      expect(payload.fetch(:activity)).to eq(
+        {
+          entries: [
+            {
+              sequence: 2,
+              category: "tool_execution",
+              title: "tool.execution_start",
+              summary: "functions.bash / tool-1",
+              raw_type: "tool.execution_start",
+              mapping_status: "complete",
+              occurred_at: "2026-04-28T01:00:05Z",
+              source_path: "/tmp/copilot/session-state/current-schema-valid/events.jsonl",
+              raw_available: true,
+              raw_payload: nil,
+              degraded: false,
+              issues: []
+            }
+          ]
+        }
+      )
+      expect(payload.fetch(:timeline)).to eq(
+        [
+          {
+            sequence: 1,
+            kind: "message",
+            mapping_status: "complete",
+            raw_type: "assistant.message",
+            occurred_at: "2026-04-28T01:00:04Z",
+            role: "assistant",
+            content: "I can inspect the latest sessions.",
+            tool_calls: [
+              {
+                name: "functions.bash",
+                arguments_preview: "{\"command\":\"git --no-pager status\"}",
+                is_truncated: false,
+                status: "complete"
+              }
+            ],
+            detail: nil,
+            raw_payload: nil,
+            degraded: false,
+            issues: []
+          },
+          {
+            sequence: 2,
+            kind: "detail",
+            mapping_status: "complete",
+            raw_type: "tool.execution_start",
+            occurred_at: "2026-04-28T01:00:05Z",
+            role: nil,
+            content: nil,
+            tool_calls: [],
+            detail: {
+              category: "tool_execution",
+              title: "tool.execution_start",
+              body: "functions.bash / tool-1"
+            },
+            raw_payload: nil,
+            degraded: false,
+            issues: []
+          }
+        ]
+      )
+    end
+
+    it "includes raw payloads only when explicitly requested" do
+      result = CopilotHistory::Api::Types::SessionLookupResult::Found.new(
+        root: build_root,
+        session: CopilotHistory::Types::NormalizedSession.new(
+          session_id: "current-schema-valid",
+          source_format: :current,
+          created_at: "2026-04-28T01:00:00Z",
+          updated_at: "2026-04-28T01:02:00Z",
+          selected_model: nil,
+          events: [
+            build_event(
+              sequence: 1,
+              raw_type: "tool.execution_start",
+              occurred_at: "2026-04-28T01:00:05Z",
+              kind: :detail,
+              detail: {
+                category: "tool_execution",
+                title: "tool.execution_start",
+                body: "functions.bash / tool-1"
+              },
+              raw_payload: {
+                "type" => "tool.execution_start"
+              }
+            )
+          ],
+          message_snapshots: [],
+          issues: [],
+          source_paths: {
+            workspace: "/tmp/copilot/session-state/current-schema-valid/workspace.yaml",
+            events: "/tmp/copilot/session-state/current-schema-valid/events.jsonl"
+          }
+        )
+      )
+
+      payload = presenter.call(result: result, include_raw: true).fetch(:data)
+
+      expect(payload.fetch(:raw_included)).to eq(true)
+      expect(payload.fetch(:timeline).first.fetch(:raw_payload)).to eq({ "type" => "tool.execution_start" })
+      expect(payload.dig(:activity, :entries).first.fetch(:raw_payload)).to eq({ "type" => "tool.execution_start" })
+    end
+
+    it "keeps unmatched event issues in the session issue list so invalid lines remain visible" do
+      unmatched_event_issue = CopilotHistory::Types::ReadIssue.new(
+        code: CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENT_PARSE_FAILED,
+        message: "events.jsonl line could not be parsed",
+        source_path: "/tmp/copilot/session-state/current-schema-degraded/events.jsonl",
+        sequence: 5,
+        severity: :error
+      )
+      result = CopilotHistory::Api::Types::SessionLookupResult::Found.new(
+        root: build_root,
+        session: CopilotHistory::Types::NormalizedSession.new(
+          session_id: "current-schema-degraded",
+          source_format: :current,
+          created_at: "2026-04-28T02:00:00Z",
+          updated_at: "2026-04-28T02:03:00Z",
+          selected_model: nil,
+          events: [
+            build_event(
+              sequence: 1,
+              raw_type: "user.message",
+              occurred_at: "2026-04-28T02:00:01Z",
+              role: "user",
+              content: "run diagnostics",
+              raw_payload: {
+                "type" => "user.message"
+              }
+            )
+          ],
+          message_snapshots: [],
+          issues: [ unmatched_event_issue ],
+          source_paths: {
+            workspace: "/tmp/copilot/session-state/current-schema-degraded/workspace.yaml",
+            events: "/tmp/copilot/session-state/current-schema-degraded/events.jsonl"
+          }
+        )
+      )
+
+      payload = presenter.call(result: result).fetch(:data)
+
+      expect(payload).to include(
+          id: "current-schema-degraded",
+          source_format: "current",
+          created_at: "2026-04-28T02:00:00Z",
+          updated_at: "2026-04-28T02:03:00Z",
+          work_context: {
+            cwd: nil,
+            git_root: nil,
+            repository: nil,
+            branch: nil
+          },
+          selected_model: nil,
+          source_state: "complete",
+          degraded: true,
+          raw_included: false,
+          issues: [
+            {
+              code: "current.event_parse_failed",
+              severity: "error",
+              message: "events.jsonl line could not be parsed",
+              source_path: "/tmp/copilot/session-state/current-schema-degraded/events.jsonl",
+              scope: "event",
+              event_sequence: 5
+            }
+          ],
+          message_snapshots: [],
+          conversation: {
+            entries: [
+              {
+                sequence: 1,
+                role: "user",
+                content: "run diagnostics",
+                occurred_at: "2026-04-28T02:00:01Z",
+                tool_calls: [],
+                degraded: false,
+                issues: []
+              }
+            ],
+            message_count: 1,
+            empty_reason: nil,
+            summary: {
+              has_conversation: true,
+              message_count: 1,
+              preview: "run diagnostics",
+              activity_count: 0
+            }
+          },
+          activity: {
+            entries: []
+          },
+          timeline: [
+            {
+              sequence: 1,
+              kind: "message",
+              mapping_status: "complete",
+              raw_type: "user.message",
+              occurred_at: "2026-04-28T02:00:01Z",
+              role: "user",
+              content: "run diagnostics",
+              tool_calls: [],
+              detail: nil,
+              raw_payload: nil,
+              degraded: false,
+              issues: []
+            }
+          ]
+      )
+    end
   end
 
   def build_root
@@ -180,14 +517,17 @@ RSpec.describe CopilotHistory::Api::Presenters::SessionDetailPresenter do
     )
   end
 
-  def build_event(sequence:, raw_type:, occurred_at:, role: nil, content: nil, kind: :message, raw_payload: nil)
+  def build_event(sequence:, raw_type:, occurred_at:, role: nil, content: nil, kind: :message, mapping_status: :complete, tool_calls: [], detail: nil, raw_payload: nil)
     CopilotHistory::Types::NormalizedEvent.new(
       sequence: sequence,
       kind: kind,
+      mapping_status: mapping_status,
       raw_type: raw_type,
       occurred_at: occurred_at,
       role: role,
       content: content,
+      tool_calls: tool_calls,
+      detail: detail,
       raw_payload: raw_payload
     )
   end

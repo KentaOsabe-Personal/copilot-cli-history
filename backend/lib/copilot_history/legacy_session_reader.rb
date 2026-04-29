@@ -12,10 +12,12 @@ module CopilotHistory
       payload, issues = read_source(source.artifact_paths.fetch(:source))
       events = normalize_events(payload, source)
       message_snapshots = normalize_message_snapshots(payload)
+      all_issues = issues + events.fetch(:issues)
 
       CopilotHistory::Types::NormalizedSession.new(
         session_id: payload.fetch("sessionId", source.session_id),
         source_format: :legacy,
+        source_state: all_issues.any? ? :degraded : :complete,
         cwd: nil,
         git_root: nil,
         repository: nil,
@@ -25,7 +27,7 @@ module CopilotHistory
         selected_model: payload["selectedModel"],
         events: events.fetch(:events),
         message_snapshots: message_snapshots,
-        issues: issues + events.fetch(:issues),
+        issues: all_issues,
         source_paths: source.artifact_paths
       )
     end

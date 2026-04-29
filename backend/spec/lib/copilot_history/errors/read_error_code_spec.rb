@@ -14,6 +14,7 @@ RSpec.describe CopilotHistory::Errors::ReadErrorCode do
 
   it "defines stable session issue codes" do
     expect(described_class::CURRENT_WORKSPACE_UNREADABLE).to eq("current.workspace_unreadable")
+    expect(described_class::CURRENT_EVENTS_MISSING).to eq("current.events_missing")
     expect(described_class::CURRENT_EVENTS_UNREADABLE).to eq("current.events_unreadable")
     expect(described_class::CURRENT_WORKSPACE_PARSE_FAILED).to eq("current.workspace_parse_failed")
     expect(described_class::CURRENT_EVENT_PARSE_FAILED).to eq("current.event_parse_failed")
@@ -23,6 +24,7 @@ RSpec.describe CopilotHistory::Errors::ReadErrorCode do
     expect(described_class::EVENT_UNKNOWN_SHAPE).to eq("event.unknown_shape")
     expect(described_class::SESSION_ISSUE_CODES).to include(
       "current.workspace_unreadable",
+      "current.events_missing",
       "current.events_unreadable",
       "current.workspace_parse_failed",
       "current.event_parse_failed",

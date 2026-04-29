@@ -28,8 +28,15 @@ describe('createSessionApiClient', () => {
             branch: 'feature/b',
           },
           selected_model: 'gpt-5.4',
+          source_state: 'complete',
           event_count: 3,
           message_snapshot_count: 1,
+          conversation_summary: {
+            has_conversation: true,
+            message_count: 1,
+            preview: 'current transcript',
+            activity_count: 2,
+          },
           degraded: false,
           issues: [],
         },
@@ -45,8 +52,15 @@ describe('createSessionApiClient', () => {
             branch: null,
           },
           selected_model: null,
+          source_state: 'degraded',
           event_count: 1,
           message_snapshot_count: 0,
+          conversation_summary: {
+            has_conversation: false,
+            message_count: 0,
+            preview: null,
+            activity_count: 1,
+          },
           degraded: true,
           issues: [
             {
@@ -76,6 +90,67 @@ describe('createSessionApiClient', () => {
       data: payload,
     })
     expect(String(fetchMock.mock.calls[0][0])).toBe('http://localhost:30000/api/sessions')
+  })
+
+  it('fetches normal and raw-explicit detail through separate typed client methods', async () => {
+    const payload = {
+      data: {
+        id: 'session-raw',
+        source_format: 'current',
+        created_at: '2026-04-26T10:00:00Z',
+        updated_at: '2026-04-26T10:05:00Z',
+        work_context: {
+          cwd: '/workspace/session-raw',
+          git_root: '/workspace/session-raw',
+          repository: 'octo/example',
+          branch: 'feature/raw',
+        },
+        selected_model: null,
+        source_state: 'complete',
+        degraded: false,
+        raw_included: false,
+        issues: [],
+        message_snapshots: [],
+        conversation: {
+          entries: [],
+          message_count: 0,
+          empty_reason: 'no_events',
+          summary: {
+            has_conversation: false,
+            message_count: 0,
+            preview: null,
+            activity_count: 0,
+          },
+        },
+        activity: {
+          entries: [],
+        },
+        timeline: [],
+      },
+    }
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse(payload))
+      .mockResolvedValueOnce(jsonResponse(payload))
+    const client = createSessionApiClient({
+      fetchImpl: fetchMock,
+      env: { VITE_API_BASE_URL: 'http://localhost:30000' },
+    })
+
+    await expect(client.fetchSessionDetail('session-raw')).resolves.toEqual({
+      status: 'success',
+      data: payload,
+    })
+    await expect(client.fetchSessionDetailWithRaw('session-raw')).resolves.toEqual({
+      status: 'success',
+      data: payload,
+    })
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      'http://localhost:30000/api/sessions/session-raw',
+    )
+    expect(String(fetchMock.mock.calls[1][0])).toBe(
+      'http://localhost:30000/api/sessions/session-raw?include_raw=true',
+    )
   })
 
   it('normalizes a detail 404 session_not_found into a not_found error', async () => {

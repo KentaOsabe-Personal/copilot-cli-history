@@ -3,6 +3,7 @@ module CopilotHistory
     class NormalizedSession < Data.define(
       :session_id,
       :source_format,
+      :source_state,
       :cwd,
       :git_root,
       :repository,
@@ -16,10 +17,12 @@ module CopilotHistory
       :source_paths
     )
       VALID_FORMATS = %i[current legacy].freeze
+      VALID_SOURCE_STATES = %i[complete workspace_only degraded].freeze
 
       def initialize(
         session_id:,
         source_format:,
+        source_state: :complete,
         cwd: nil,
         git_root: nil,
         repository: nil,
@@ -35,9 +38,15 @@ module CopilotHistory
         normalized_format = source_format.to_sym
         raise ArgumentError, "source_format must be one of: #{VALID_FORMATS.join(", ")}" unless VALID_FORMATS.include?(normalized_format)
 
+        normalized_source_state = source_state.to_sym
+        unless VALID_SOURCE_STATES.include?(normalized_source_state)
+          raise ArgumentError, "source_state must be one of: #{VALID_SOURCE_STATES.join(", ")}"
+        end
+
         super(
           session_id: session_id,
           source_format: normalized_format,
+          source_state: normalized_source_state,
           cwd: normalize_path(cwd),
           git_root: normalize_path(git_root),
           repository: repository,

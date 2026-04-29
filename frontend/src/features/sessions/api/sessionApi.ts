@@ -35,6 +35,17 @@ export function createSessionApiClient(
         signal,
       })
     },
+    fetchSessionDetailWithRaw(sessionId, signal) {
+      if (sessionId.length === 0) {
+        throw new Error('sessionId must not be empty')
+      }
+
+      return requestJson(`/api/sessions/${encodeURIComponent(sessionId)}?include_raw=true`, {
+        fetchImpl,
+        env,
+        signal,
+      })
+    },
   }
 }
 

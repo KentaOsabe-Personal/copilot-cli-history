@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import type {
@@ -19,7 +20,14 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function createClient(fetchSessionDetail: SessionApiClient['fetchSessionDetail']): SessionApiClient {
+function createClient(
+  fetchSessionDetail: SessionApiClient['fetchSessionDetail'],
+  fetchSessionDetailWithRaw: SessionApiClient['fetchSessionDetailWithRaw'] = vi.fn<
+    SessionApiClient['fetchSessionDetailWithRaw']
+  >(async (): Promise<SessionApiResult<SessionDetailResponse>> => {
+    throw new Error('fetchSessionDetailWithRaw should not be called in useSessionDetail tests')
+  }),
+): SessionApiClient {
   return {
     fetchSessionIndex: vi.fn<
       SessionApiClient['fetchSessionIndex']
@@ -27,6 +35,7 @@ function createClient(fetchSessionDetail: SessionApiClient['fetchSessionDetail']
       throw new Error('fetchSessionIndex should not be called in useSessionDetail tests')
     }),
     fetchSessionDetail,
+    fetchSessionDetailWithRaw,
   }
 }
 
@@ -44,9 +53,25 @@ function buildDetail(sessionId: string): SessionDetailResponse {
         branch: 'main',
       },
       selected_model: 'gpt-5.4',
+      source_state: 'complete',
       degraded: false,
+      raw_included: false,
       issues: [],
       message_snapshots: [],
+      conversation: {
+        entries: [],
+        message_count: 0,
+        empty_reason: 'no_events',
+        summary: {
+          has_conversation: false,
+          message_count: 0,
+          preview: null,
+          activity_count: 0,
+        },
+      },
+      activity: {
+        entries: [],
+      },
       timeline: [],
     },
   }
@@ -59,9 +84,16 @@ function StateProbe({
   client: SessionApiClient
   sessionId: string
 }) {
-  const { state } = useSessionDetail(sessionId, { client })
+  const { state, requestRaw } = useSessionDetail(sessionId, { client })
 
-  return <pre data-testid="state">{JSON.stringify(state)}</pre>
+  return (
+    <>
+      <pre data-testid="state">{JSON.stringify(state)}</pre>
+      <button type="button" onClick={requestRaw}>
+        raw
+      </button>
+    </>
+  )
 }
 
 function readState() {
@@ -91,6 +123,7 @@ describe('useSessionDetail', () => {
         status: 'success',
         sessionId: 'session-123',
         detail: buildDetail('session-123').data,
+        rawStatus: 'idle',
       }),
     )
   })
@@ -206,6 +239,7 @@ describe('useSessionDetail', () => {
         status: 'success',
         sessionId: 'session-b',
         detail: buildDetail('session-b').data,
+        rawStatus: 'idle',
       }),
     )
   })
@@ -228,6 +262,7 @@ describe('useSessionDetail', () => {
         status: 'success',
         sessionId: 'session-123',
         detail: buildDetail('session-123').data,
+        rawStatus: 'idle',
       }),
     )
 
@@ -259,6 +294,100 @@ describe('useSessionDetail', () => {
           code: 'service_unavailable',
           message: 'service unavailable',
           details: {},
+        },
+      }),
+    )
+  })
+
+  it('keeps the normal detail visible while explicitly loading raw detail', async () => {
+    const rawRequest = deferred<SessionApiResult<SessionDetailResponse>>()
+    const fetchSessionDetail = vi.fn<SessionApiClient['fetchSessionDetail']>(async () => ({
+      status: 'success',
+      data: buildDetail('session-123'),
+    }))
+    const fetchSessionDetailWithRaw = vi.fn<SessionApiClient['fetchSessionDetailWithRaw']>(
+      () => rawRequest.promise,
+    )
+    const client = createClient(fetchSessionDetail, fetchSessionDetailWithRaw)
+    const user = userEvent.setup()
+
+    render(<StateProbe client={client} sessionId="session-123" />)
+
+    await waitFor(() =>
+      expect(readState()).toMatchObject({
+        status: 'success',
+        sessionId: 'session-123',
+        rawStatus: 'idle',
+        detail: buildDetail('session-123').data,
+      }),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'raw' }))
+
+    expect(fetchSessionDetailWithRaw).toHaveBeenCalledWith('session-123', expect.any(AbortSignal))
+    expect(readState()).toMatchObject({
+      status: 'success',
+      sessionId: 'session-123',
+      rawStatus: 'loading',
+      detail: buildDetail('session-123').data,
+    })
+
+    rawRequest.resolve({
+      status: 'success',
+      data: {
+        data: {
+          ...buildDetail('session-123').data,
+          raw_included: true,
+        },
+      },
+    })
+
+    await waitFor(() =>
+      expect(readState()).toMatchObject({
+        status: 'success',
+        sessionId: 'session-123',
+        rawStatus: 'included',
+        detail: {
+          raw_included: true,
+        },
+      }),
+    )
+  })
+
+  it('keeps conversation detail visible when raw explicit request fails', async () => {
+    const fetchSessionDetail = vi.fn<SessionApiClient['fetchSessionDetail']>(async () => ({
+      status: 'success',
+      data: buildDetail('session-123'),
+    }))
+    const fetchSessionDetailWithRaw = vi.fn<SessionApiClient['fetchSessionDetailWithRaw']>(async () => ({
+      status: 'error',
+      error: {
+        kind: 'network',
+        code: 'network_error',
+        message: 'Network request failed',
+        details: {
+          cause: 'offline',
+        },
+      },
+    }))
+    const client = createClient(fetchSessionDetail, fetchSessionDetailWithRaw)
+    const user = userEvent.setup()
+
+    render(<StateProbe client={client} sessionId="session-123" />)
+
+    await waitFor(() => expect(readState().status).toBe('success'))
+
+    await user.click(screen.getByRole('button', { name: 'raw' }))
+
+    await waitFor(() =>
+      expect(readState()).toMatchObject({
+        status: 'success',
+        sessionId: 'session-123',
+        rawStatus: 'error',
+        detail: buildDetail('session-123').data,
+        rawError: {
+          kind: 'network',
+          code: 'network_error',
         },
       }),
     )

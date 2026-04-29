@@ -1,4 +1,4 @@
-import type { SessionIssue, WorkContext } from '../api/sessionApi.types.ts'
+import type { SessionIssue, SessionSourceState, WorkContext } from '../api/sessionApi.types.ts'
 
 const MISSING_TIMESTAMP_LABEL = '時刻不明'
 const MISSING_WORK_CONTEXT_LABEL = '作業コンテキスト不明'
@@ -48,6 +48,14 @@ export function formatModel(value: string | null): string {
 
 export function formatDegradedLabel(degraded: boolean): string {
   return degraded ? '一部欠損あり' : '正常'
+}
+
+export function formatSourceStateLabel(sourceState: SessionSourceState): string {
+  if (sourceState === 'workspace_only') {
+    return 'workspace-only'
+  }
+
+  return sourceState
 }
 
 export function formatIssueMetadata(

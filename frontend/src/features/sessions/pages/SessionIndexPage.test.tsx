@@ -26,8 +26,15 @@ function buildSessionSummary(overrides: Partial<SessionSummary> = {}): SessionSu
       branch: 'main',
     },
     selected_model: 'gpt-5.4',
+    source_state: 'complete',
     event_count: 5,
     message_snapshot_count: 3,
+    conversation_summary: {
+      has_conversation: true,
+      message_count: 2,
+      preview: '履歴を確認したい',
+      activity_count: 3,
+    },
     degraded: false,
     issues: [],
     ...overrides,
@@ -115,6 +122,55 @@ describe('SessionIndexPage', () => {
       'href',
       '/sessions/session-b',
     )
+  })
+
+  it('shows conversation summary, preview, source state, and corrected updated time on cards', () => {
+    mockedUseSessionIndex.mockReturnValue({
+      state: {
+        status: 'success',
+        sessions: [
+          buildSessionSummary({
+            id: 'conversation-session',
+            updated_at: '2026-04-26T10:05:00Z',
+            conversation_summary: {
+              has_conversation: true,
+              message_count: 4,
+              preview: '次の実装方針を相談したい',
+              activity_count: 7,
+            },
+          }),
+          buildSessionSummary({
+            id: 'workspace-only-session',
+            source_state: 'workspace_only',
+            conversation_summary: {
+              has_conversation: false,
+              message_count: 0,
+              preview: null,
+              activity_count: 0,
+            },
+          }),
+        ],
+        meta: {
+          count: 2,
+          partial_results: false,
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter>
+        <SessionIndexPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('会話あり')).toBeInTheDocument()
+    expect(screen.getByText('4 件の会話')).toBeInTheDocument()
+    expect(screen.getByText('7 件の内部 activity')).toBeInTheDocument()
+    expect(screen.getByText('次の実装方針を相談したい')).toBeInTheDocument()
+    expect(screen.getByText('2026-04-26 10:05:00 UTC')).toBeInTheDocument()
+    expect(screen.getByText('metadata-only')).toBeInTheDocument()
+    expect(screen.getByText('workspace-only')).toBeInTheDocument()
+    expect(screen.getByText('表示できる会話本文はありません')).toBeInTheDocument()
   })
 
   it('renders an error panel without success cards when the fetch fails', () => {

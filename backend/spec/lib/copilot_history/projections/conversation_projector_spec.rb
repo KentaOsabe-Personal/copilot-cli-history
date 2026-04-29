@@ -1,0 +1,142 @@
+require "rails_helper"
+
+RSpec.describe CopilotHistory::Projections::ConversationProjector, :copilot_history do
+  subject(:projector) { described_class.new }
+
+  describe "#call" do
+    it "projects only non-empty user and assistant messages in source sequence order" do
+      with_copilot_history_fixture("current_schema_valid") do |root|
+        session = read_first_current_session(root)
+
+        projection = projector.call(session)
+
+        expect(projection.entries.map { |entry| [ entry.sequence, entry.role, entry.content ] }).to eq(
+          [
+            [ 2, "user", "show recent sessions" ],
+            [ 4, "assistant", "I can inspect the latest sessions." ]
+          ]
+        )
+        expect(projection.entries.last.tool_calls.map(&:name)).to eq([ "functions.bash" ])
+        expect(projection.message_count).to eq(2)
+        expect(projection.empty_reason).to be_nil
+      end
+    end
+
+    it "keeps legacy user and assistant messages in the same projection contract" do
+      with_copilot_history_fixture("current_schema_mixed_root") do |root|
+        session = read_session(root, "legacy-schema-mixed")
+
+        projection = projector.call(session)
+
+        expect(projection.entries.map { |entry| [ entry.sequence, entry.role, entry.content ] }).to eq(
+          [
+            [ 1, "user", "legacy mixed question" ],
+            [ 2, "assistant", "legacy mixed answer" ]
+          ]
+        )
+        expect(projection.summary).to have_attributes(
+          has_conversation: true,
+          message_count: 2,
+          preview: "legacy mixed question"
+        )
+      end
+    end
+
+    it "returns a stable empty reason when events exist but no conversation messages qualify" do
+      session = CopilotHistory::Types::NormalizedSession.new(
+        session_id: "activity-only",
+        source_format: :current,
+        events: [
+          build_event(sequence: 1, kind: :message, raw_type: "system.message", role: "system", content: "internal"),
+          build_event(sequence: 2, kind: :detail, raw_type: "tool.execution_start", detail: { category: "tool_execution" })
+        ],
+        message_snapshots: [],
+        issues: [],
+        source_paths: {}
+      )
+
+      projection = projector.call(session)
+
+      expect(projection.entries).to eq([])
+      expect(projection.message_count).to eq(0)
+      expect(projection.empty_reason).to eq("no_conversation_messages")
+      expect(projection.summary).to have_attributes(
+        has_conversation: false,
+        message_count: 0,
+        preview: nil
+      )
+    end
+
+    it "uses no_events as the empty reason when a session has no normalized events" do
+      session = CopilotHistory::Types::NormalizedSession.new(
+        session_id: "workspace-only",
+        source_format: :current,
+        source_state: :workspace_only,
+        events: [],
+        message_snapshots: [],
+        issues: [],
+        source_paths: {}
+      )
+
+      expect(projector.call(session).empty_reason).to eq("no_events")
+    end
+
+    it "uses events_unavailable when current events could not be normalized" do
+      session = CopilotHistory::Types::NormalizedSession.new(
+        session_id: "unreadable-events",
+        source_format: :current,
+        source_state: :degraded,
+        events: [],
+        message_snapshots: [],
+        issues: [
+          CopilotHistory::Types::ReadIssue.new(
+            code: CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_UNREADABLE,
+            message: "events.jsonl is not accessible",
+            source_path: Pathname.new("/tmp/events.jsonl"),
+            severity: :error
+          )
+        ],
+        source_paths: {}
+      )
+
+      expect(projector.call(session).empty_reason).to eq("events_unavailable")
+    end
+  end
+
+  def read_first_current_session(root)
+    source = CopilotHistory::SessionSourceCatalog.new.call(resolved_root(root)).find { |candidate| candidate.format == :current }
+    CopilotHistory::CurrentSessionReader.new.call(source)
+  end
+
+  def read_session(root, session_id)
+    source = CopilotHistory::SessionSourceCatalog.new.call(resolved_root(root)).find { |candidate| candidate.session_id == session_id }
+
+    case source.format
+    when :current
+      CopilotHistory::CurrentSessionReader.new.call(source)
+    when :legacy
+      CopilotHistory::LegacySessionReader.new.call(source)
+    end
+  end
+
+  def resolved_root(root)
+    CopilotHistory::Types::ResolvedHistoryRoot.new(
+      root_path: root,
+      current_root: root.join("session-state"),
+      legacy_root: root.join("history-session-state")
+    )
+  end
+
+  def build_event(sequence:, kind:, raw_type:, role: nil, content: nil, detail: nil)
+    CopilotHistory::Types::NormalizedEvent.new(
+      sequence: sequence,
+      kind: kind,
+      raw_type: raw_type,
+      occurred_at: nil,
+      role: role,
+      content: content,
+      detail: detail,
+      raw_payload: { "type" => raw_type }
+    )
+  end
+end

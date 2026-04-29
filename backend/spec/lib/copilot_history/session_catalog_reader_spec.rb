@@ -31,6 +31,24 @@ RSpec.describe CopilotHistory::SessionCatalogReader, :copilot_history do
       end
     end
 
+    it "returns current dotted schema and legacy sessions from the same history root" do
+      with_copilot_history_fixture("current_schema_mixed_root") do |root|
+        ENV["COPILOT_HOME"] = root.to_s
+
+        result = build_reader.call
+
+        expect(result).to be_a(CopilotHistory::Types::ReadResult::Success)
+        expect(result.sessions.map { |session| [ session.session_id, session.source_format, session.source_state ] }).to eq(
+          [
+            [ "current-schema-mixed", :current, :complete ],
+            [ "legacy-schema-mixed", :legacy, :complete ]
+          ]
+        )
+        expect(result.sessions.first.events.map(&:raw_type)).to eq(%w[user.message assistant.message])
+        expect(result.sessions.last.events.map(&:raw_type)).to eq(%w[user_message assistant_message])
+      end
+    end
+
     it "preserves mixed-session ordering and raw payloads across current unknown and legacy partial events" do
       with_copilot_history_fixture("mixed_root") do |root|
         legacy_path = root.join("history-session-state/legacy-mixed.json")
@@ -63,7 +81,8 @@ RSpec.describe CopilotHistory::SessionCatalogReader, :copilot_history do
           }
         )
         expect(legacy_session.events.map(&:sequence)).to eq([ 1, 2 ])
-        expect(legacy_session.events.last.kind).to eq(:partial)
+        expect(legacy_session.events.last.kind).to eq(:message)
+        expect(legacy_session.events.last.mapping_status).to eq(:partial)
         expect(legacy_session.events.last.raw_payload).to eq(
           {
             "type" => "assistant_message",

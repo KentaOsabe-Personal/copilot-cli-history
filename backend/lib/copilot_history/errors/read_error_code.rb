@@ -6,6 +6,7 @@ module CopilotHistory
       ROOT_UNREADABLE = "root_unreadable"
 
       CURRENT_WORKSPACE_UNREADABLE = "current.workspace_unreadable"
+      CURRENT_EVENTS_MISSING = "current.events_missing"
       CURRENT_EVENTS_UNREADABLE = "current.events_unreadable"
       CURRENT_WORKSPACE_PARSE_FAILED = "current.workspace_parse_failed"
       CURRENT_EVENT_PARSE_FAILED = "current.event_parse_failed"
@@ -22,6 +23,7 @@ module CopilotHistory
 
       SESSION_ISSUE_CODES = [
         CURRENT_WORKSPACE_UNREADABLE,
+        CURRENT_EVENTS_MISSING,
         CURRENT_EVENTS_UNREADABLE,
         CURRENT_WORKSPACE_PARSE_FAILED,
         CURRENT_EVENT_PARSE_FAILED,
