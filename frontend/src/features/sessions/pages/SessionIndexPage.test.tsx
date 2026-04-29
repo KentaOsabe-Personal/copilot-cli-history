@@ -124,7 +124,7 @@ describe('SessionIndexPage', () => {
     )
   })
 
-  it('shows conversation summary, preview, source state, and corrected updated time on cards', () => {
+  it('keeps normal sessions free of always-on status badges while surfacing exceptional states', () => {
     mockedUseSessionIndex.mockReturnValue({
       state: {
         status: 'success',
@@ -140,6 +140,15 @@ describe('SessionIndexPage', () => {
             },
           }),
           buildSessionSummary({
+            id: 'metadata-only-session',
+            conversation_summary: {
+              has_conversation: false,
+              message_count: 0,
+              preview: null,
+              activity_count: 0,
+            },
+          }),
+          buildSessionSummary({
             id: 'workspace-only-session',
             source_state: 'workspace_only',
             conversation_summary: {
@@ -151,7 +160,7 @@ describe('SessionIndexPage', () => {
           }),
         ],
         meta: {
-          count: 2,
+          count: 3,
           partial_results: false,
         },
       },
@@ -163,14 +172,16 @@ describe('SessionIndexPage', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('会話あり')).toBeInTheDocument()
     expect(screen.getByText('4 件の会話')).toBeInTheDocument()
-    expect(screen.getByText('7 件の内部 activity')).toBeInTheDocument()
     expect(screen.getByText('次の実装方針を相談したい')).toBeInTheDocument()
     expect(screen.getByText('2026-04-26 19:05:00 JST')).toBeInTheDocument()
+    expect(screen.queryByText('会話あり')).not.toBeInTheDocument()
+    expect(screen.queryByText('正常')).not.toBeInTheDocument()
+    expect(screen.queryByText('complete')).not.toBeInTheDocument()
+    expect(screen.queryByText('7 件の内部 activity')).not.toBeInTheDocument()
     expect(screen.getByText('metadata-only')).toBeInTheDocument()
     expect(screen.getByText('workspace-only')).toBeInTheDocument()
-    expect(screen.getByText('表示できる会話本文はありません')).toBeInTheDocument()
+    expect(screen.getAllByText('表示できる会話本文はありません')).toHaveLength(2)
   })
 
   it('renders an error panel without success cards when the fetch fails', () => {

@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import type { SessionDetail } from '../api/sessionApi.types.ts'
 import {
   buildSessionMetadataItems,
-  formatDegradedLabel,
+  buildSessionDetailSignals,
 } from '../presentation/formatters.ts'
 
 interface SessionDetailHeaderProps {
@@ -16,6 +16,10 @@ function SessionDetailHeader({ detail }: SessionDetailHeaderProps) {
     workContext: detail.work_context,
     selectedModel: detail.selected_model,
   })
+  const signals = buildSessionDetailSignals({
+    degraded: detail.degraded,
+    sourceState: detail.source_state,
+  })
 
   return (
     <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-slate-950/20">
@@ -23,15 +27,18 @@ function SessionDetailHeader({ detail }: SessionDetailHeaderProps) {
         <div>
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="font-mono text-xl font-semibold text-cyan-200">{detail.id}</h3>
-            <span
-              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                detail.degraded
-                  ? 'bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/25'
-                  : 'bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-300/20'
-              }`}
-            >
-              {formatDegradedLabel(detail.degraded)}
-            </span>
+            {signals.map((signal) => (
+              <span
+                key={signal.label}
+                className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                  signal.tone === 'warning'
+                    ? 'bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/25'
+                    : 'bg-slate-700 text-slate-100 ring-1 ring-slate-600'
+                }`}
+              >
+                {signal.label}
+              </span>
+            ))}
           </div>
 
           {metadataItems.length > 0 ? (

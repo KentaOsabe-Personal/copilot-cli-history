@@ -49,6 +49,11 @@ export interface MetadataDisplayItem {
   value: string
 }
 
+export interface SessionSignalBadge {
+  label: string
+  tone: 'neutral' | 'warning'
+}
+
 export function getDisplayableWorkContext(workContext: WorkContext): string | null {
   const repository = normalizeText(workContext.repository)
   const branch = normalizeText(workContext.branch)
@@ -109,6 +114,38 @@ export function formatSourceStateLabel(sourceState: SessionSourceState): string 
   return sourceState
 }
 
+export function buildSessionSummarySignals(input: {
+  hasConversation: boolean
+  degraded: boolean
+  sourceState: SessionSourceState
+}): readonly SessionSignalBadge[] {
+  const badges: SessionSignalBadge[] = []
+
+  if (!input.hasConversation) {
+    badges.push({
+      label: input.sourceState === 'workspace_only' ? 'workspace-only' : 'metadata-only',
+      tone: input.sourceState === 'workspace_only' ? 'warning' : 'neutral',
+    })
+  }
+
+  const constraintBadge = buildSessionConstraintBadge(input)
+
+  if (constraintBadge != null && !badges.some((badge) => badge.label === constraintBadge.label)) {
+    badges.push(constraintBadge)
+  }
+
+  return badges
+}
+
+export function buildSessionDetailSignals(input: {
+  degraded: boolean
+  sourceState: SessionSourceState
+}): readonly SessionSignalBadge[] {
+  const constraintBadge = buildSessionConstraintBadge(input)
+
+  return constraintBadge == null ? [] : [constraintBadge]
+}
+
 export function formatIssueMetadata(
   issue: Pick<SessionIssue, 'severity' | 'scope' | 'event_sequence'>,
 ): {
@@ -134,4 +171,25 @@ function normalizeText(value: string | null): string | null {
   const normalized = value?.trim()
 
   return normalized != null && normalized.length > 0 ? normalized : null
+}
+
+function buildSessionConstraintBadge(input: {
+  degraded: boolean
+  sourceState: SessionSourceState
+}): SessionSignalBadge | null {
+  if (input.degraded || input.sourceState === 'degraded') {
+    return {
+      label: '一部欠損あり',
+      tone: 'warning',
+    }
+  }
+
+  if (input.sourceState === 'workspace_only') {
+    return {
+      label: 'workspace-only',
+      tone: 'warning',
+    }
+  }
+
+  return null
 }

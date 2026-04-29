@@ -3,8 +3,7 @@ import { Link } from 'react-router'
 import type { SessionSummary } from '../api/sessionApi.types.ts'
 import {
   buildSessionMetadataItems,
-  formatDegradedLabel,
-  formatSourceStateLabel,
+  buildSessionSummarySignals,
 } from '../presentation/formatters.ts'
 
 interface SessionSummaryCardProps {
@@ -12,13 +11,15 @@ interface SessionSummaryCardProps {
 }
 
 function SessionSummaryCard({ session }: SessionSummaryCardProps) {
-  const conversationLabel = session.conversation_summary.has_conversation
-    ? '会話あり'
-    : 'metadata-only'
   const metadataItems = buildSessionMetadataItems({
     updatedAt: session.updated_at,
     workContext: session.work_context,
     selectedModel: session.selected_model,
+  })
+  const signals = buildSessionSummarySignals({
+    hasConversation: session.conversation_summary.has_conversation,
+    degraded: session.degraded,
+    sourceState: session.source_state,
   })
 
   return (
@@ -27,27 +28,18 @@ function SessionSummaryCard({ session }: SessionSummaryCardProps) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <h3 className="font-mono text-lg font-semibold text-cyan-200">{session.id}</h3>
-            <span
-              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                session.conversation_summary.has_conversation
-                  ? 'bg-cyan-400/15 text-cyan-100 ring-1 ring-cyan-300/20'
-                  : 'bg-slate-700 text-slate-100 ring-1 ring-slate-600'
-              }`}
-            >
-              {conversationLabel}
-            </span>
-            <span
-              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                session.degraded
-                  ? 'bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/25'
-                  : 'bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-300/20'
-              }`}
-            >
-              {formatDegradedLabel(session.degraded)}
-            </span>
-            <span className="inline-flex rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-200 ring-1 ring-slate-700">
-              {formatSourceStateLabel(session.source_state)}
-            </span>
+            {signals.map((signal) => (
+              <span
+                key={signal.label}
+                className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                  signal.tone === 'warning'
+                    ? 'bg-amber-400/15 text-amber-200 ring-1 ring-amber-300/25'
+                    : 'bg-slate-700 text-slate-100 ring-1 ring-slate-600'
+                }`}
+              >
+                {signal.label}
+              </span>
+            ))}
           </div>
 
           <div className="mt-4 rounded-2xl border border-slate-700/70 bg-slate-950/30 p-4">
@@ -57,9 +49,6 @@ function SessionSummaryCard({ session }: SessionSummaryCardProps) {
             <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-slate-300">
               <span className="rounded-full bg-slate-800 px-2.5 py-1">
                 {`${session.conversation_summary.message_count} 件の会話`}
-              </span>
-              <span className="rounded-full bg-slate-800 px-2.5 py-1">
-                {`${session.conversation_summary.activity_count} 件の内部 activity`}
               </span>
             </div>
           </div>

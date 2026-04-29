@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildSessionMetadataItems,
+  buildSessionDetailSignals,
+  buildSessionSummarySignals,
   formatDegradedLabel,
   formatIssueMetadata,
   formatTimestamp,
@@ -82,5 +84,35 @@ describe('formatters', () => {
       scopeLabel: 'イベント',
       locationLabel: 'イベント #8',
     })
+  })
+
+  it('builds only exceptional session signals for summary and detail surfaces', () => {
+    expect(
+      buildSessionSummarySignals({
+        hasConversation: true,
+        degraded: false,
+        sourceState: 'complete',
+      }),
+    ).toEqual([])
+    expect(
+      buildSessionSummarySignals({
+        hasConversation: false,
+        degraded: false,
+        sourceState: 'complete',
+      }),
+    ).toEqual([{ label: 'metadata-only', tone: 'neutral' }])
+    expect(
+      buildSessionSummarySignals({
+        hasConversation: false,
+        degraded: false,
+        sourceState: 'workspace_only',
+      }),
+    ).toEqual([{ label: 'workspace-only', tone: 'warning' }])
+    expect(
+      buildSessionDetailSignals({
+        degraded: true,
+        sourceState: 'degraded',
+      }),
+    ).toEqual([{ label: '一部欠損あり', tone: 'warning' }])
   })
 })

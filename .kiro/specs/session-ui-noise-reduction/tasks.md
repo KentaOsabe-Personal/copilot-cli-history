@@ -51,8 +51,8 @@
   - _Requirements: 5.1, 5.2, 5.3, 5.4_
   - _Boundary: conversationContent_
 
-- [ ] 4. 一覧 card と詳細 header から常設ノイズと不明値を除く
-- [ ] 4.1 セッション一覧 card を例外シグナルと実値 metadata 優先の表示にする
+- [x] 4. 一覧 card と詳細 header から常設ノイズと不明値を除く
+- [x] 4.1 セッション一覧 card を例外シグナルと実値 metadata 優先の表示にする
   - 通常状態だけを示す会話あり、正常、complete、内部 activity 数の主要表示を既定表示から外す
   - 会話本文なし、workspace-only、degraded、読取制約は一覧上で通常 session より目立つ例外として識別できるようにする
   - 完了時には current / legacy の通常 session が同じ基準で並び、metadata がない card には空の metadata 領域が残らない
@@ -60,7 +60,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.3, 2.4, 2.5, 3.2, 3.4_
   - _Boundary: SessionSummaryCard_
 
-- [ ] 4.2 (P) セッション詳細 header を値がある metadata だけの表示にする
+- [x] 4.2 (P) セッション詳細 header を値がある metadata だけの表示にする
   - work context と model は実値がある場合だけ表示し、不明 placeholder や placeholder だけの領域は出さない
   - degraded や読取制約の事実は header で確認できる状態を保つ
   - 完了時には詳細 header が read-only のまま、metadata 欠損時も余白だけの領域を残さない

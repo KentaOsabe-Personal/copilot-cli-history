@@ -370,10 +370,11 @@ describe('SessionDetailPage', () => {
     renderDetailPage('/sessions/legacy-session-123')
 
     expect(screen.getAllByText('legacy-session-123').length).toBeGreaterThan(0)
-    expect(screen.getByText('正常')).toBeInTheDocument()
     expect(screen.getByText('assistant')).toBeInTheDocument()
     expect(screen.getByText('legacy transcript remains readable')).toBeInTheDocument()
     expect(screen.queryByText('partial')).not.toBeInTheDocument()
+    expect(screen.queryByText('正常')).not.toBeInTheDocument()
+    expect(screen.queryByText('workspace-only')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'セッションの issue' })).not.toBeInTheDocument()
   })
 
