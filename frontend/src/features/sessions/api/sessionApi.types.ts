@@ -88,7 +88,11 @@ export interface SessionTimelineEvent {
   issues: readonly SessionIssue[]
 }
 
-export type SessionConversationEmptyReason = 'no_events' | 'no_conversation_messages' | null
+export type SessionConversationEmptyReason =
+  | 'no_events'
+  | 'no_conversation_messages'
+  | 'events_unavailable'
+  | null
 
 export interface SessionConversationEntry {
   sequence: number

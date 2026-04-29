@@ -80,6 +80,27 @@ RSpec.describe CopilotHistory::Projections::ConversationProjector, :copilot_hist
 
       expect(projector.call(session).empty_reason).to eq("no_events")
     end
+
+    it "uses events_unavailable when current events could not be normalized" do
+      session = CopilotHistory::Types::NormalizedSession.new(
+        session_id: "unreadable-events",
+        source_format: :current,
+        source_state: :degraded,
+        events: [],
+        message_snapshots: [],
+        issues: [
+          CopilotHistory::Types::ReadIssue.new(
+            code: CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_UNREADABLE,
+            message: "events.jsonl is not accessible",
+            source_path: Pathname.new("/tmp/events.jsonl"),
+            severity: :error
+          )
+        ],
+        source_paths: {}
+      )
+
+      expect(projector.call(session).empty_reason).to eq("events_unavailable")
+    end
   end
 
   def read_first_current_session(root)

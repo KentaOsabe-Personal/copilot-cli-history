@@ -46,9 +46,19 @@ module CopilotHistory
 
       def empty_reason_for(session:, entries:)
         return nil if entries.any?
+        return "events_unavailable" if session.events.empty? && events_unavailable?(session)
         return "no_events" if session.events.empty?
 
         "no_conversation_messages"
+      end
+
+      def events_unavailable?(session)
+        unavailable_codes = [
+          CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENTS_UNREADABLE,
+          CopilotHistory::Errors::ReadErrorCode::CURRENT_EVENT_PARSE_FAILED
+        ]
+
+        session.issues.any? { |issue| unavailable_codes.include?(issue.code) }
       end
 
       def preview_for(entries)
