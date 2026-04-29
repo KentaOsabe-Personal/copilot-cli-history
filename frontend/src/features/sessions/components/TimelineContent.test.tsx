@@ -31,7 +31,7 @@ function buildEvent(overrides: Partial<SessionTimelineEvent> = {}): SessionTimel
 
 describe('TimelineContent', () => {
   it('renders text, code, and tool hint blocks with distinct labels', () => {
-    render(<TimelineContent event={buildEvent()} />)
+    render(<TimelineContent stateScopeKey="session-1:event-1" event={buildEvent()} />)
 
     expect(screen.getByText('functions.bash')).toBeInTheDocument()
     expect(screen.getByText('hello')).toBeInTheDocument()
@@ -42,6 +42,7 @@ describe('TimelineContent', () => {
   it('renders detail summaries as separate non-message blocks', () => {
     render(
       <TimelineContent
+        stateScopeKey="session-1:event-1"
         event={buildEvent({
           kind: 'detail',
           role: null,
@@ -65,6 +66,7 @@ describe('TimelineContent', () => {
   it('collapses long tool arguments by default while keeping tool metadata visible', () => {
     render(
       <TimelineContent
+        stateScopeKey="session-1:event-1"
         event={buildEvent({
           tool_calls: [
             {
@@ -92,6 +94,7 @@ describe('TimelineContent', () => {
 
     render(
       <TimelineContent
+        stateScopeKey="session-1:event-1"
         event={buildEvent({
           tool_calls: [
             {
@@ -116,9 +119,42 @@ describe('TimelineContent', () => {
     expect(within(toolBlock).getByText('ツール呼び出し')).toBeInTheDocument()
   })
 
+  it('resets disclosure state when the scope changes to a different session with the same payload', async () => {
+    const user = userEvent.setup()
+    const event = buildEvent({
+      content: null,
+      tool_calls: [
+        {
+          name: 'skill-context',
+          arguments_preview: 'first session\nexpanded',
+          is_truncated: true,
+          status: 'partial',
+        },
+      ],
+    })
+    const { rerender } = render(
+      <TimelineContent stateScopeKey="session-1:event-1" event={event} />,
+    )
+
+    const firstToolBlock = screen.getByRole('group', { name: 'tool call skill-context' })
+
+    await user.click(within(firstToolBlock).getByRole('button', { name: 'arguments を表示' }))
+    expect(firstToolBlock).toHaveTextContent(/first session\s+expanded/)
+
+    rerender(
+      <TimelineContent stateScopeKey="session-2:event-1" event={event} />,
+    )
+
+    const secondToolBlock = screen.getByRole('group', { name: 'tool call skill-context' })
+
+    expect(within(secondToolBlock).getByRole('button', { name: 'arguments を表示' })).toBeInTheDocument()
+    expect(secondToolBlock).not.toHaveTextContent(/first session\s+expanded/)
+  })
+
   it('does not render an arguments toggle when a tool call has no arguments preview', () => {
     render(
       <TimelineContent
+        stateScopeKey="session-1:event-1"
         event={buildEvent({
           content: null,
           tool_calls: [

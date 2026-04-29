@@ -9,6 +9,7 @@ interface ActivityTimelineProps {
   rawIncluded: boolean
   rawStatus: 'idle' | 'loading' | 'included' | 'error'
   onRequestRaw: () => void
+  stateScopeKey: string
 }
 
 function ActivityTimeline({
@@ -16,6 +17,7 @@ function ActivityTimeline({
   rawIncluded,
   rawStatus,
   onRequestRaw,
+  stateScopeKey,
 }: ActivityTimelineProps) {
   return (
     <section className="space-y-4">
@@ -94,6 +96,7 @@ function ActivityTimeline({
 
                 <div className="mt-4">
                   <TimelineContent
+                    stateScopeKey={`${stateScopeKey}:activity:${entry.sequence}`}
                     event={{
                       content: null,
                       tool_calls: [],

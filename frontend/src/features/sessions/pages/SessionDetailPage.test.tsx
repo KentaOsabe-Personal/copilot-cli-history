@@ -352,6 +352,161 @@ describe('SessionDetailPage', () => {
     expect(screen.queryByRole('heading', { name: 'セッションの issue' })).not.toBeInTheDocument()
   })
 
+  it('keeps other conversation and activity details readable even when one entry lacks renderable body content', () => {
+    mockedUseSessionDetail.mockReturnValue({
+      state: {
+        status: 'success',
+        sessionId: 'session-123',
+        rawStatus: 'idle',
+        detail: buildDetail({
+          conversation: {
+            entries: [
+              {
+                sequence: 1,
+                role: 'assistant',
+                content: '',
+                occurred_at: '2026-04-26T09:00:00Z',
+                tool_calls: [],
+                degraded: true,
+                issues: [
+                  {
+                    code: 'message.empty',
+                    severity: 'warning',
+                    message: 'entry body missing',
+                    source_path: null,
+                    scope: 'event',
+                    event_sequence: 1,
+                  },
+                ],
+              },
+              {
+                sequence: 2,
+                role: 'user',
+                content: 'follow-up question still visible',
+                occurred_at: '2026-04-26T09:00:04Z',
+                tool_calls: [],
+                degraded: false,
+                issues: [],
+              },
+            ],
+            message_count: 2,
+            empty_reason: null,
+            summary: {
+              has_conversation: true,
+              message_count: 2,
+              preview: 'follow-up question still visible',
+              activity_count: 2,
+            },
+          },
+        }),
+      },
+      requestRaw,
+    })
+
+    renderDetailPage()
+
+    expect(screen.getByText('発話 #1')).toBeInTheDocument()
+    expect(screen.getByText('entry body missing')).toBeInTheDocument()
+    expect(screen.getByText('follow-up question still visible')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '内部 activity' })).toBeInTheDocument()
+    expect(screen.getByText('functions.bash / tool-1')).toBeInTheDocument()
+  })
+
+  it('preserves conversation, activity, degraded, and issue metadata for legacy detail responses too', () => {
+    mockedUseSessionDetail.mockReturnValue({
+      state: {
+        status: 'success',
+        sessionId: 'legacy-session-456',
+        rawStatus: 'idle',
+        detail: buildDetail({
+          id: 'legacy-session-456',
+          source_format: 'legacy',
+          source_state: 'degraded',
+          degraded: true,
+          issues: [
+            {
+              code: 'legacy.partial',
+              severity: 'warning',
+              message: 'legacy history is incomplete',
+              source_path: '/tmp/legacy.json',
+              scope: 'session',
+              event_sequence: null,
+            },
+          ],
+          conversation: {
+            entries: [
+              {
+                sequence: 1,
+                role: 'assistant',
+                content: 'legacy transcript remains readable',
+                occurred_at: '2026-04-26T08:59:00Z',
+                tool_calls: [],
+                degraded: true,
+                issues: [
+                  {
+                    code: 'legacy.message.partial',
+                    severity: 'warning',
+                    message: 'legacy assistant message is partial',
+                    source_path: null,
+                    scope: 'event',
+                    event_sequence: 1,
+                  },
+                ],
+              },
+            ],
+            message_count: 1,
+            empty_reason: null,
+            summary: {
+              has_conversation: true,
+              message_count: 1,
+              preview: 'legacy transcript remains readable',
+              activity_count: 1,
+            },
+          },
+          activity: {
+            entries: [
+              {
+                sequence: 2,
+                category: 'tool_execution',
+                title: 'tool.execution_start',
+                summary: 'legacy tool execution stays readable',
+                raw_type: 'tool.execution_start',
+                mapping_status: 'partial',
+                occurred_at: '2026-04-26T08:59:02Z',
+                source_path: null,
+                raw_available: true,
+                raw_payload: null,
+                degraded: true,
+                issues: [
+                  {
+                    code: 'legacy.activity.partial',
+                    severity: 'warning',
+                    message: 'legacy activity is partial',
+                    source_path: null,
+                    scope: 'event',
+                    event_sequence: 2,
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      },
+      requestRaw,
+    })
+
+    renderDetailPage('/sessions/legacy-session-456')
+
+    expect(screen.getAllByText('legacy-session-456').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('一部欠損あり').length).toBeGreaterThan(0)
+    expect(screen.getByText('legacy history is incomplete')).toBeInTheDocument()
+    expect(screen.getByText('legacy transcript remains readable')).toBeInTheDocument()
+    expect(screen.getByText('legacy assistant message is partial')).toBeInTheDocument()
+    expect(screen.getByText('legacy tool execution stays readable')).toBeInTheDocument()
+    expect(screen.getByText('legacy activity is partial')).toBeInTheDocument()
+    expect(screen.getByText('2026-04-26 17:59:02 JST')).toBeInTheDocument()
+  })
+
   it('renders a dedicated not found panel with a link back to the index', () => {
     mockedUseSessionDetail.mockReturnValue({
       state: {
@@ -458,5 +613,25 @@ describe('SessionDetailPage', () => {
     renderDetailPage()
 
     expect(screen.getByText('raw included')).toBeInTheDocument()
+  })
+
+  it('keeps the detail page read-only without edit, delete, send, share, timezone, or dedicated raw-viewer controls', () => {
+    mockedUseSessionDetail.mockReturnValue({
+      state: {
+        status: 'success',
+        sessionId: 'session-123',
+        rawStatus: 'idle',
+        detail: buildDetail(),
+      },
+      requestRaw,
+    })
+
+    renderDetailPage()
+
+    expect(screen.queryByRole('button', { name: /編集|削除|送信|共有/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /編集|削除|送信|共有/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: /timezone|タイムゾーン/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /timezone|タイムゾーン/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /raw viewer|raw payload viewer/i })).not.toBeInTheDocument()
   })
 })

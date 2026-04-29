@@ -70,8 +70,8 @@
   - _Requirements: 5.1, 5.2, 5.4, 5.5, 6.1, 6.2_
   - _Boundary: SessionIndexPage, SessionList_
 
-- [ ] 4. read-only 境界と current / legacy 表示の回帰を検証する
-- [ ] 4.1 current / legacy session の詳細表示が既存情報を維持することを確認する
+- [x] 4. read-only 境界と current / legacy 表示の回帰を検証する
+- [x] 4.1 current / legacy session の詳細表示が既存情報を維持することを確認する
   - current session と legacy session の本文、activity、degraded、issue 情報が引き続き確認できる
   - tool call または本文が欠落している発話があっても、他の発話や activity の閲覧が妨げられない
   - 詳細表示の regression test で、会話本文、activity、degraded、issue 情報が残っていることを確認できる
@@ -79,7 +79,7 @@
   - _Requirements: 6.2, 6.3, 6.4_
   - _Boundary: SessionDetailPage_
 
-- [ ] 4.2 feature 全体が read-only と非永続 UI state の境界を越えていないことを確認する
+- [x] 4.2 feature 全体が read-only と非永続 UI state の境界を越えていないことを確認する
   - 編集、削除、送信、共有の操作が追加されていない
   - タイムゾーン選択、折りたたみ状態の永続化、raw payload 専用 viewer が追加されていない
   - backend list / detail response shape の変更を必須にしないまま frontend tests が通る

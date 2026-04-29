@@ -4,12 +4,21 @@ import type { SessionTimelineEvent } from '../api/sessionApi.types.ts'
 import { formatTimelineContent } from '../presentation/timelineContent.ts'
 
 interface TimelineContentProps {
+  stateScopeKey: string
   event: Pick<SessionTimelineEvent, 'content' | 'tool_calls' | 'detail'>
 }
 
-function TimelineContent({ event }: TimelineContentProps) {
+function TimelineContent({ event, stateScopeKey }: TimelineContentProps) {
   const { blocks } = formatTimelineContent(event)
-  const [expandedTools, setExpandedTools] = useState<Readonly<Record<string, boolean>>>({})
+  const [toolDisclosureState, setToolDisclosureState] = useState<{
+    scopeKey: string
+    expandedTools: Readonly<Record<string, boolean>>
+  }>({
+    scopeKey: '',
+    expandedTools: {},
+  })
+  const expandedTools =
+    toolDisclosureState.scopeKey === stateScopeKey ? toolDisclosureState.expandedTools : {}
 
   if (blocks.length === 0) {
     return null
@@ -55,14 +64,22 @@ function TimelineContent({ event }: TimelineContentProps) {
                   <button
                     type="button"
                     className="rounded-full border border-cyan-200/30 bg-cyan-50/10 px-3 py-1 text-xs font-semibold text-cyan-50 transition hover:border-cyan-100/60 hover:bg-cyan-50/20"
-                    aria-expanded={isExpanded}
-                    onClick={() => {
-                      setExpandedTools((current) => ({
-                        ...current,
-                        [toolKey]: !isExpanded,
-                      }))
-                    }}
-                  >
+                     aria-expanded={isExpanded}
+                     onClick={() => {
+                       setToolDisclosureState((current) => {
+                         const currentTools =
+                           current.scopeKey === stateScopeKey ? current.expandedTools : {}
+
+                         return {
+                           scopeKey: stateScopeKey,
+                           expandedTools: {
+                             ...currentTools,
+                             [toolKey]: !isExpanded,
+                           },
+                         }
+                       })
+                     }}
+                   >
                     {isExpanded ? 'arguments を隠す' : 'arguments を表示'}
                   </button>
                 ) : null}

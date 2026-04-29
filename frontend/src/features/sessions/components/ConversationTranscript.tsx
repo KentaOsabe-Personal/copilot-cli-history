@@ -8,10 +8,19 @@ import TimelineContent from './TimelineContent.tsx'
 
 interface ConversationTranscriptProps {
   conversation: SessionConversation
+  stateScopeKey: string
 }
 
-function ConversationTranscript({ conversation }: ConversationTranscriptProps) {
-  const [visibleEntries, setVisibleEntries] = useState<Readonly<Record<number, boolean>>>({})
+function ConversationTranscript({ conversation, stateScopeKey }: ConversationTranscriptProps) {
+  const [visibilityState, setVisibilityState] = useState<{
+    scopeKey: string
+    visibleEntries: Readonly<Record<number, boolean>>
+  }>({
+    scopeKey: '',
+    visibleEntries: {},
+  })
+  const visibleEntries =
+    visibilityState.scopeKey === stateScopeKey ? visibilityState.visibleEntries : {}
 
   return (
     <section className="space-y-4">
@@ -74,14 +83,22 @@ function ConversationTranscript({ conversation }: ConversationTranscriptProps) {
                   <button
                     type="button"
                     className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-white/30 hover:bg-white/10"
-                    aria-expanded={isVisible}
-                    onClick={() => {
-                      setVisibleEntries((current) => ({
-                        ...current,
-                        [entry.sequence]: !isVisible,
-                      }))
-                    }}
-                  >
+                     aria-expanded={isVisible}
+                     onClick={() => {
+                       setVisibilityState((current) => {
+                         const currentEntries =
+                           current.scopeKey === stateScopeKey ? current.visibleEntries : {}
+
+                         return {
+                           scopeKey: stateScopeKey,
+                           visibleEntries: {
+                             ...currentEntries,
+                             [entry.sequence]: !isVisible,
+                           },
+                         }
+                       })
+                     }}
+                   >
                     {isVisible ? `発話 #${entry.sequence} を非表示` : `発話 #${entry.sequence} を表示`}
                   </button>
                 </div>
@@ -92,6 +109,7 @@ function ConversationTranscript({ conversation }: ConversationTranscriptProps) {
                   <>
                     <div className="mt-4">
                       <TimelineContent
+                        stateScopeKey={`${stateScopeKey}:entry:${entry.sequence}`}
                         event={{
                           content: entry.content,
                           tool_calls: entry.tool_calls,

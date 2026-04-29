@@ -49,7 +49,7 @@ function buildConversation(): SessionConversation {
 
 describe('ConversationTranscript', () => {
   it('marks user and assistant entries with role-specific visual state beyond the role badge', () => {
-    render(<ConversationTranscript conversation={buildConversation()} />)
+    render(<ConversationTranscript conversation={buildConversation()} stateScopeKey="session-1" />)
 
     expect(screen.getByTestId('conversation-entry-1')).toHaveAttribute('data-role', 'user')
     expect(screen.getByTestId('conversation-entry-1')).toHaveClass('border-emerald-300/35')
@@ -58,7 +58,7 @@ describe('ConversationTranscript', () => {
   })
 
   it('keeps degraded and issue indicators readable with assistant role styling', () => {
-    render(<ConversationTranscript conversation={buildConversation()} />)
+    render(<ConversationTranscript conversation={buildConversation()} stateScopeKey="session-1" />)
 
     const assistantEntry = screen.getByTestId('conversation-entry-2')
 
@@ -100,7 +100,7 @@ describe('ConversationTranscript', () => {
       ],
     }
 
-    render(<ConversationTranscript conversation={conversation} />)
+    render(<ConversationTranscript conversation={conversation} stateScopeKey="session-1" />)
 
     const entry = screen.getByTestId('conversation-entry-7')
 
@@ -126,5 +126,24 @@ describe('ConversationTranscript', () => {
     expect(entry).toHaveTextContent('npm test')
     expect(entry).toHaveTextContent('skill-context')
     expect(entry).toHaveTextContent('message was incomplete')
+  })
+
+  it('resets entry visibility when the scope changes to a different session with the same payload', async () => {
+    const user = userEvent.setup()
+    const conversation = buildConversation()
+    const { rerender } = render(
+      <ConversationTranscript conversation={conversation} stateScopeKey="session-1" />,
+    )
+
+    await user.click(screen.getByRole('button', { name: '発話 #1 を非表示' }))
+
+    expect(screen.queryByText('Need help with the CLI output')).not.toBeInTheDocument()
+
+    rerender(
+      <ConversationTranscript conversation={conversation} stateScopeKey="session-2" />,
+    )
+
+    expect(screen.getByText('Need help with the CLI output')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '発話 #1 を非表示' })).toBeInTheDocument()
   })
 })
