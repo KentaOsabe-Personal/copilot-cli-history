@@ -16,8 +16,8 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 6.3, 6.4_
   - _Boundary: Existing session display components_
 
-- [ ] 2. 会話本文と tool call の表示モデルを拡張する
-- [ ] 2.1 (P) tool call arguments の初期折りたたみ方針を表示モデルに追加する
+- [x] 2. 会話本文と tool call の表示モデルを拡張する
+- [x] 2.1 (P) tool call arguments の初期折りたたみ方針を表示モデルに追加する
   - `skill-context`、複数行 arguments、truncated arguments が初期折りたたみ対象として判定される
   - 短い単一行 arguments は tool 名、status、preview を保持し、必要以上に初期折りたたみされない
   - arguments が折りたたみ対象でも、tool の存在、tool 名、status、truncated 状態は表示モデルから失われない
@@ -25,7 +25,7 @@
   - _Requirements: 4.1, 4.2, 4.3, 4.5, 6.4_
   - _Boundary: conversationContent_
 
-- [ ] 2.2 (P) User / Assistant 発話を badge 以外でも識別できる視覚状態にする
+- [x] 2.2 (P) User / Assistant 発話を badge 以外でも識別できる視覚状態にする
   - user と assistant の発話 card が背景、枠線、または accent の違いで比較できる
   - degraded 状態や issue 情報がある発話でも、role の識別と partial 表示が同時に残る
   - 本文、code block、tool call 補助情報が role styling に埋もれず読める配色と余白になる
@@ -33,7 +33,7 @@
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 6.3_
   - _Boundary: ConversationTranscript_
 
-- [ ] 2.3 (P) 一覧の直近成功状態を同一閲覧 flow で再利用できるようにする
+- [x] 2.3 (P) 一覧の直近成功状態を同一閲覧 flow で再利用できるようにする
   - 成功した一覧または空状態だけが直近 snapshot として保持される
   - 初回未取得時は既存 loading が表示され、error は再利用 snapshot として保存されない
   - 詳細から一覧へ戻る再 mount 相当の状況で、直前の一覧または空状態が即時に返る

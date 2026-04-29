@@ -33,12 +33,20 @@ function ConversationTranscript({ conversation }: ConversationTranscriptProps) {
         <ol className="space-y-4">
           {conversation.entries.map((entry) => {
             const content = formatConversationEntryContent(entry)
+            const roleCardClass =
+              entry.role === 'assistant'
+                ? 'border-cyan-300/35 bg-cyan-950/25 shadow-cyan-950/20'
+                : 'border-emerald-300/35 bg-emerald-950/20 shadow-emerald-950/20'
+            const roleAccentClass = entry.role === 'assistant' ? 'bg-cyan-300' : 'bg-emerald-300'
 
             return (
               <li
                 key={entry.sequence}
-                className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 shadow-2xl shadow-slate-950/20"
+                data-testid={`conversation-entry-${entry.sequence}`}
+                data-role={entry.role}
+                className={`relative overflow-hidden rounded-3xl border p-6 shadow-2xl ${roleCardClass}`}
               >
+                <div className={`absolute inset-y-0 left-0 w-1 ${roleAccentClass}`} aria-hidden="true" />
                 <div className="flex flex-wrap items-center gap-2">
                   <h4 className="text-lg font-semibold text-white">{`発話 #${entry.sequence}`}</h4>
                   <span

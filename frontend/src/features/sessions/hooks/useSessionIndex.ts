@@ -30,6 +30,12 @@ export interface UseSessionIndexResult {
 }
 
 type SettledSessionIndexState = Exclude<SessionIndexState, { status: 'loading' }>
+type ReusableSessionIndexState = Extract<SessionIndexState, { status: 'success' | 'empty' }>
+
+let lastReusableSnapshot: {
+  client: SessionApiClient
+  state: ReusableSessionIndexState
+} | null = null
 
 export function useSessionIndex(
   options: UseSessionIndexOptions = {},
@@ -38,7 +44,7 @@ export function useSessionIndex(
   const [settledState, setSettledState] = useState<{
     client: SessionApiClient
     state: SettledSessionIndexState
-  } | null>(null)
+  } | null>(() => lastReusableSnapshot)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -61,20 +67,28 @@ export function useSessionIndex(
       }
 
       if (result.data.data.length === 0) {
-        setSettledState({
+        lastReusableSnapshot = {
           client,
           state: { status: 'empty' },
+        }
+        setSettledState({
+          client,
+          state: lastReusableSnapshot.state,
         })
         return
       }
 
-      setSettledState({
+      lastReusableSnapshot = {
         client,
         state: {
           status: 'success',
           sessions: result.data.data,
           meta: result.data.meta,
         },
+      }
+      setSettledState({
+        client,
+        state: lastReusableSnapshot.state,
       })
     })
 

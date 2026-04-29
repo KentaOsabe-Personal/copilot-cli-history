@@ -13,7 +13,15 @@ export type ConversationVisualBlock =
       argumentsPreview: string | null
       isTruncated: boolean
       status: 'complete' | 'partial'
+      argumentsDefaultCollapsed: boolean
+      collapseReason: ToolCollapseReason
     }
+
+export type ToolCollapseReason =
+  | 'skill_context'
+  | 'multiline_arguments'
+  | 'truncated_arguments'
+  | 'none'
 
 export interface ConversationEntryContentModel {
   role: 'user' | 'assistant'
@@ -71,13 +79,35 @@ export function extractContentBlocks(content: string | null): ConversationVisual
 export function extractToolHintBlocks(
   toolCalls: readonly SessionTimelineToolCall[] | undefined,
 ): ConversationVisualBlock[] {
-  return (toolCalls ?? []).map((toolCall) => ({
-    kind: 'tool_hint',
-    name: toolCall.name,
-    argumentsPreview: toolCall.arguments_preview,
-    isTruncated: toolCall.is_truncated,
-    status: toolCall.status,
-  }))
+  return (toolCalls ?? []).map((toolCall) => {
+    const collapseReason = resolveToolCollapseReason(toolCall)
+
+    return {
+      kind: 'tool_hint',
+      name: toolCall.name,
+      argumentsPreview: toolCall.arguments_preview,
+      isTruncated: toolCall.is_truncated,
+      status: toolCall.status,
+      argumentsDefaultCollapsed: collapseReason !== 'none',
+      collapseReason,
+    }
+  })
+}
+
+function resolveToolCollapseReason(toolCall: SessionTimelineToolCall): ToolCollapseReason {
+  if (toolCall.name === 'skill-context') {
+    return 'skill_context'
+  }
+
+  if (toolCall.is_truncated) {
+    return 'truncated_arguments'
+  }
+
+  if (toolCall.arguments_preview?.includes('\n') === true) {
+    return 'multiline_arguments'
+  }
+
+  return 'none'
 }
 
 function pushTextBlock(blocks: ConversationVisualBlock[], text: string) {
