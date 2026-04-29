@@ -121,6 +121,53 @@ RSpec.describe CopilotHistory::Projections::ConversationProjector, :copilot_hist
         expect(tool_only_entries.first.tool_calls.first.arguments_preview).to include("long skill context")
       end
     end
+
+    it "keeps tool-only messages with their utterance issues and excludes empty messages without tool calls" do
+      utterance_issue = CopilotHistory::Types::ReadIssue.new(
+        code: CopilotHistory::Errors::ReadErrorCode::EVENT_PARTIAL_MAPPING,
+        message: "event payload matched partially",
+        source_path: Pathname.new("/tmp/events.jsonl"),
+        sequence: 2,
+        severity: :warning
+      )
+      session = CopilotHistory::Types::NormalizedSession.new(
+        session_id: "tool-only-with-issue",
+        source_format: :current,
+        events: [
+          build_event(sequence: 1, kind: :message, raw_type: "user.message", role: "user", content: nil),
+          build_event(
+            sequence: 2,
+            kind: :message,
+            raw_type: "assistant.message",
+            role: "assistant",
+            content: nil,
+            tool_calls: [
+              CopilotHistory::Types::NormalizedToolCall.new(
+                name: "skill-context",
+                arguments_preview: "{\"context\":\"trimmed\"}",
+                is_truncated: false,
+                status: :complete
+              )
+            ]
+          )
+        ],
+        message_snapshots: [],
+        issues: [ utterance_issue ],
+        source_paths: {}
+      )
+
+      projection = projector.call(session)
+
+      expect(projection.entries.map(&:sequence)).to eq([ 2 ])
+      expect(projection.entries.first).to have_attributes(
+        role: "assistant",
+        content: "",
+        degraded: true,
+        issues: [ utterance_issue ]
+      )
+      expect(projection.entries.first.tool_calls.map(&:name)).to eq([ "skill-context" ])
+      expect(projection.empty_reason).to be_nil
+    end
   end
 
   def read_first_current_session(root)
@@ -147,7 +194,7 @@ RSpec.describe CopilotHistory::Projections::ConversationProjector, :copilot_hist
     )
   end
 
-  def build_event(sequence:, kind:, raw_type:, role: nil, content: nil, detail: nil)
+  def build_event(sequence:, kind:, raw_type:, role: nil, content: nil, tool_calls: [], detail: nil)
     CopilotHistory::Types::NormalizedEvent.new(
       sequence: sequence,
       kind: kind,
@@ -155,6 +202,7 @@ RSpec.describe CopilotHistory::Projections::ConversationProjector, :copilot_hist
       occurred_at: nil,
       role: role,
       content: content,
+      tool_calls: tool_calls,
       detail: detail,
       raw_payload: { "type" => raw_type }
     )

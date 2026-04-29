@@ -125,6 +125,70 @@ RSpec.describe CopilotHistory::Api::Presenters::SessionIndexPresenter do
         }
       )
     end
+
+    it "keeps current selected_model values in the existing summary schema" do
+      result = CopilotHistory::Types::ReadResult::Success.new(
+        root: build_root,
+        sessions: [
+          CopilotHistory::Types::NormalizedSession.new(
+            session_id: "current-model-with-values",
+            source_format: :current,
+            source_state: :complete,
+            created_at: "2026-04-29T00:00:00Z",
+            updated_at: "2026-04-29T00:00:02Z",
+            selected_model: "gpt-5-current",
+            events: [
+              build_event(
+                sequence: 1,
+                raw_type: "assistant.message",
+                occurred_at: "2026-04-29T00:00:01Z",
+                role: "assistant",
+                content: "tool-only sessions should still expose the selected model"
+              )
+            ],
+            message_snapshots: [],
+            issues: [],
+            source_paths: {
+              workspace: "/tmp/copilot/session-state/current-model-with-values/workspace.yaml",
+              events: "/tmp/copilot/session-state/current-model-with-values/events.jsonl"
+            }
+          )
+        ]
+      )
+
+      expect(presenter.call(result: result)).to eq(
+        data: [
+          {
+            id: "current-model-with-values",
+            source_format: "current",
+            created_at: "2026-04-29T00:00:00Z",
+            updated_at: "2026-04-29T00:00:02Z",
+            work_context: {
+              cwd: nil,
+              git_root: nil,
+              repository: nil,
+              branch: nil
+            },
+            selected_model: "gpt-5-current",
+            source_state: "complete",
+            event_count: 1,
+            message_snapshot_count: 0,
+            conversation_summary: {
+              has_conversation: true,
+              message_count: 1,
+              preview: "tool-only sessions should still expose the selected model",
+              activity_count: 0
+            },
+            degraded: false,
+            issues: []
+          }
+        ],
+        meta: {
+          count: 1,
+          partial_results: false
+        }
+      )
+    end
   end
 
   def build_root

@@ -13,7 +13,7 @@
   - 完了時には UI テストが保存形式ではなく実データの有無に基づく表示差分を assertion できる
   - _Requirements: 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 2.5, 3.2, 3.4, 4.2, 4.3, 5.5, 6.2, 6.3_
 
-- [ ] 2. backend の current metadata と会話投影を既存 contract に接続する
+- [x] 2. backend の current metadata と会話投影を既存 contract に接続する
 - [x] 2.1 current 形式の保存済み event から確認できるモデル名を session metadata として抽出する
   - 確認済みの model 候補を優先順に評価し、同一優先度では後続 event の非空値を採用する
   - model が存在しない、空、または文字列でない場合は推測値や placeholder を作らず欠損として扱う
@@ -21,14 +21,14 @@
   - _Requirements: 3.1, 3.3, 3.5_
   - _Boundary: CurrentSessionReader_
 
-- [ ] 2.2 (P) content が空でも tool call を持つ発話を会話 entry として残す
+- [x] 2.2 (P) content が空でも tool call を持つ発話を会話 entry として残す
   - user / assistant の message は本文または tool call のどちらかがある場合に会話へ投影する
   - 本文も tool call もない空発話は従来どおり表示対象から外す
   - 完了時には skill-context などの tool-only event が詳細 response の会話順序内で確認でき、同じ発話の issue も保持される
   - _Requirements: 4.3, 4.4, 5.2, 5.4, 5.5_
   - _Boundary: ConversationProjector_
 
-- [ ] 2.3 backend の index / detail response が既存 field のまま新しい値を返すことを固定する
+- [x] 2.3 backend の index / detail response が既存 field のまま新しい値を返すことを固定する
   - selected model は current / legacy 共通の nullable metadata として index と detail の両方に出す
   - tool-only 会話 entry と発話近傍 issue が detail response に到達することを確認する
   - 完了時には API response shape を増やさず、既存 presenter contract で一覧と詳細の判断材料を返せる
