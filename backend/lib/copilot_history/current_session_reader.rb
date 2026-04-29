@@ -172,7 +172,7 @@ module CopilotHistory
       values << [ 3, data["currentModel"] ] if raw_type == "session.shutdown"
       values << [ 2, data["model"] ] if raw_type == "tool.execution_complete"
       values << [ 1, data["model"] ] if raw_type == "assistant.usage"
-      values << [ 1, raw_event["model"] ]
+      values << [ 0, raw_event["model"] ]
       values
     end
 

@@ -384,7 +384,7 @@ RSpec.describe CopilotHistory::CurrentSessionReader, :copilot_history do
       end
     end
 
-    it "falls back to saved assistant.usage data.model when higher-priority candidates are unavailable" do
+    it "prefers saved assistant.usage data.model over a root model when higher-priority candidates are unavailable" do
       with_copilot_history_fixture("current_model") do |root|
         session = described_class.new.call(build_source(root, "current-model-usage-fallback"))
 
