@@ -24,7 +24,7 @@
   - _Boundary: SessionRecordBuilder, SourceFingerprintBuilder_
 
 - [ ] 2. 同期結果と API 表現の契約を固定する
-- [ ] 2.1 service が返す同期結果を成功、conflict、失敗として区別できるようにする
+- [x] 2.1 service が返す同期結果を成功、conflict、失敗として区別できるようにする
   - 成功結果は terminal sync run を保持し、controller が同期完了状態を自由文字列で解釈しなくてよい
   - conflict 結果は既存 running sync run を保持し、既存実行を上書きしない応答に使える
   - 失敗結果は terminal sync run、failure code、message、details を保持し、root failure と永続化失敗を区別できる
@@ -32,7 +32,7 @@
   - _Requirements: 1.2, 4.2, 6.2_
   - _Boundary: SyncResult_
 
-- [ ] 2.2 同期結果を HTTP status と JSON payload に変換する presenter を用意する
+- [x] 2.2 同期結果を HTTP status と JSON payload に変換する presenter を用意する
   - 成功時は sync run の状態、開始/終了時刻、processed/inserted/updated/saved/skipped/failed/degraded 件数を data payload に含める
   - running conflict は 409 の error envelope として返し、既存 running sync run の識別情報を details で確認できる
   - root failure は upstream failure code と path を含む 503、永続化失敗は sync run と failure class を含む 500 として返す
