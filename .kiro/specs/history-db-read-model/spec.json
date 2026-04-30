@@ -1,0 +1,22 @@
+{
+  "feature_name": "history-db-read-model",
+  "created_at": "2026-04-30T10:48:55+09:00",
+  "updated_at": "2026-04-30T11:38:41+09:00",
+  "language": "ja",
+  "phase": "tasks-approved",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}
