@@ -21,14 +21,13 @@ module CopilotHistory
         running_run = existing_running_run
         return SyncResult::Conflict.new(running_run:) if running_run
 
-        sync_run = start_running_run
+        sync_run = start_running_run_or_conflict
+        return sync_run if sync_run.is_a?(SyncResult::Conflict)
 
         read_result = reader.call
         return handle_root_failure(sync_run:, failure: read_result.failure) if read_result.failure?
 
         persist_success(sync_run:, sessions: read_result.sessions)
-      rescue ActiveRecord::RecordNotUnique
-        SyncResult::Conflict.new(running_run: existing_running_run)
       end
 
       private
@@ -41,6 +40,15 @@ module CopilotHistory
           started_at: current_time,
           running_lock_key: RUNNING_LOCK_KEY
         )
+      end
+
+      def start_running_run_or_conflict
+        start_running_run
+      rescue ActiveRecord::RecordNotUnique
+        running_run = existing_running_run
+        raise unless running_run
+
+        SyncResult::Conflict.new(running_run:)
       end
 
       def existing_running_run

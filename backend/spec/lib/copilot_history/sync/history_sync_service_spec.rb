@@ -264,6 +264,29 @@ RSpec.describe CopilotHistory::Sync::HistorySyncService do
     )
   end
 
+  it "handles session uniqueness errors as persistence failures and releases the running lock" do
+    session = build_session(session_id: "duplicate-session")
+    fingerprint = fingerprint_for("duplicate")
+    allow(reader).to receive(:call).and_return(success_result(session))
+    allow(fingerprint_builder).to receive(:call).with(source_paths: session.source_paths).and_return(fingerprint)
+    allow(record_builder).to receive(:call)
+      .with(session:, indexed_at: now, source_fingerprint: fingerprint)
+      .and_return(attributes_for(session, fingerprint))
+    allow(CopilotSession).to receive(:find_by).with(session_id: "duplicate-session").and_return(nil)
+    allow(CopilotSession).to receive(:create!).and_raise(ActiveRecord::RecordNotUnique)
+
+    result = service.call
+
+    expect(result).to be_failed
+    expect(result.code).to eq("history_sync_failed")
+    expect(result.details.fetch(:failure_class)).to eq("ActiveRecord::RecordNotUnique")
+    expect(result.sync_run).to have_attributes(
+      status: "failed",
+      failed_count: 1,
+      running_lock_key: nil
+    )
+  end
+
   def success_result(*sessions)
     CopilotHistory::Types::ReadResult::Success.new(root: nil, sessions: sessions)
   end

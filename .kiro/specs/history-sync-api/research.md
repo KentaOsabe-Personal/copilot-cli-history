@@ -1,6 +1,6 @@
-# Research & Design Decisions
+# 調査と設計判断
 
-## Summary
+## 概要
 - **Feature**: `history-sync-api`
 - **Discovery Scope**: Extension
 - **Key Findings**:
@@ -8,7 +8,7 @@
   - `history-db-read-model` は `CopilotSession`、`HistorySyncRun`、`SessionRecordBuilder`、`SourceFingerprintBuilder` を提供済みだが、二重実行を DB レベルで防ぐ lock key と insert/update count の永続化は未定義である。
   - skip 判定は `source_fingerprint` の一致だけで決め、skip 時は `summary_payload` / `detail_payload` を再保存しない設計にすることで、raw files 正本と read model の再生成可能性を維持できる。
 
-## Research Log
+## 調査ログ
 
 ### 既存 reader の成功と失敗境界
 - **Context**: root failure と degraded session を同期 API で別扱いにする要件がある。
@@ -44,7 +44,7 @@
   - terminal status へ更新するときは `running_lock_key` を `nil` に戻し、次回同期を許可する。
   - `inserted_count` と `updated_count` を追加し、API response と実行履歴の双方で insert/update/skip を識別できるようにする。
 
-### HTTP API integration
+### HTTP API 統合
 - **Context**: 既存 Rails API の route/controller/presenter パターンに合わせる必要がある。
 - **Sources Consulted**: `backend/config/routes.rb`, `backend/app/controllers/api/sessions_controller.rb`, `backend/lib/copilot_history/api/presenters/error_presenter.rb`, `.kiro/specs/backend-session-api/design.md`
 - **Findings**:
@@ -55,7 +55,7 @@
   - `POST /api/history/sync` を同期 command endpoint とし、controller は `HistorySyncService` と `HistorySyncPresenter` のみを使う。
   - 成功と degraded completion は 200、running conflict は 409、root failure は 503、予期しない永続化失敗は 500 とする。
 
-## Architecture Pattern Evaluation
+## アーキテクチャパターン評価
 
 | Option | Description | Strengths | Risks / Limitations | Notes |
 |--------|-------------|-----------|---------------------|-------|
@@ -64,9 +64,9 @@
 | Background job | POST は job enqueue だけを行い、後続 polling で結果を見る | 長時間処理に強い | 要件 1.2 と 6.3 が request 内完了、初期 background job なしを要求している | 不採用 |
 | DB nullable unique lock | running 中だけ固定 lock key を入れ、terminal で nil に戻す | MySQL で単一 running を DB レベルに保証できる | crash 後の running 行は手動復旧が必要 | 採用 |
 
-## Design Decisions
+## 設計判断
 
-### Decision: 同期処理は request 内 service として実行する
+### 判断: 同期処理は request 内 service として実行する
 - **Context**: 要件は同期要求を受け付けた request 内で完了状態を返すことを求め、background job と polling を初期範囲から除外している。
 - **Alternatives Considered**:
   1. Controller direct implementation — 実装は速いが責務が混ざる。
@@ -77,7 +77,7 @@
 - **Trade-offs**: request が同期完了まで待つため、非常に大きな履歴では latency が増える。初期要件では許容し、background 化は revalidation trigger とする。
 - **Follow-up**: 実装時に service の transaction 範囲と failure update を request spec で固定する。
 
-### Decision: skip 判定は source fingerprint の完全一致で行う
+### 判断: skip 判定は source fingerprint の完全一致で行う
 - **Context**: raw files を正本にしつつ、保存済み payload の不要な再保存を避ける必要がある。
 - **Alternatives Considered**:
   1. 常に upsert — 単純だが skip 要件に反する。
@@ -88,7 +88,7 @@
 - **Trade-offs**: ファイル内容が変わって mtime/size が同一の場合は検知できない。初期設計では既存 fingerprint contract を尊重し、hash 内容拡張は別 revalidation とする。
 - **Follow-up**: `SessionRecordBuilder` に precomputed fingerprint を渡せるようにし、比較結果と保存値を一致させる。
 
-### Decision: running lock は `history_sync_runs` の nullable unique key で表現する
+### 判断: running lock は `history_sync_runs` の nullable unique key で表現する
 - **Context**: アプリ内の `exists?` check だけでは並行 request の競合を完全には防げない。
 - **Alternatives Considered**:
   1. `HistorySyncRun.where(status: "running").exists?` のみ — race condition が残る。
@@ -99,7 +99,7 @@
 - **Trade-offs**: process crash で running 行が残ると以後 conflict になる。初期仕様では自動 stale recovery は扱わない。
 - **Follow-up**: 実装時に conflict response が既存 running 行を上書きしないことを request spec で確認する。
 
-### Decision: insert/update count は実行履歴にも保存する
+### 判断: insert/update count は実行履歴にも保存する
 - **Context**: 要件 2.5 は insert、update、skip の件数を同期結果として識別できることを求めている。
 - **Alternatives Considered**:
   1. API response だけで insert/update を返す — 後続処理が run record から参照できない。
@@ -110,13 +110,13 @@
 - **Trade-offs**: prior read model spec の `HistorySyncRun` schema を拡張するため、関連 spec の revalidation 対象になる。
 - **Follow-up**: model validation で非負整数と saved count 整合性を確認する。
 
-## Risks & Mitigations
+## リスクと緩和策
 - 同期中に永続化例外が発生すると部分更新が残るリスク — session writes と terminal success update を transaction に入れ、例外時は rollback 後に run を `failed` へ更新する。
 - running 行が crash 後に残るリスク — 初期実装では conflict として扱い、手動復旧を前提にする。stale recovery は別 spec の revalidation trigger とする。
 - fingerprint 比較と保存 payload 生成の間に raw file が変わるリスク — precomputed fingerprint を builder に渡し、少なくとも判定値と保存値を一致させる。厳密な filesystem snapshot は初期範囲外とする。
 - API response が既存 session API error envelope と drift するリスク — sync presenter は既存 `{ error: { code, message, details } }` 形を維持する。
 
-## References
+## 参考資料
 - `.kiro/steering/product.md` — raw files 正本、degraded data の扱い。
 - `.kiro/steering/tech.md` — Rails API / MySQL / RSpec / Docker Compose 前提。
 - `.kiro/steering/structure.md` — backend controller と `backend/lib/copilot_history` の責務分離。

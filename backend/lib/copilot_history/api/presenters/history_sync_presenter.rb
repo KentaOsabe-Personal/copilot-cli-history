@@ -25,11 +25,12 @@ module CopilotHistory
           status = root_failure_code?(result.code) ? :service_unavailable : :internal_server_error
           details = result.details.dup
           details = details.merge(sync_run_id: result.sync_run.id) if status == :internal_server_error
+          code = status == :internal_server_error ? HISTORY_SYNC_FAILED_CODE : result.code
 
           [
             status,
             {
-              error: error_body(code: result.code, message: result.message, details:),
+              error: error_body(code:, message: result.message, details:),
               meta: run_meta(sync_run: result.sync_run)
             }
           ]

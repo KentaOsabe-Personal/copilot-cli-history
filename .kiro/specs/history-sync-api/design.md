@@ -1,27 +1,27 @@
-# Design Document
+# 設計書
 
-## Overview
+## 概要
 この feature は、利用者または後続 UI からの明示操作で GitHub Copilot CLI の raw files を読み取り、保存済み read model を同期する HTTP API を提供する。同期は request 内で完了し、root failure、degraded session、insert / update / skip、二重実行 conflict を自由文解釈なしで判定できる応答と実行履歴を残す。
 
 対象利用者はローカル履歴を更新したい利用者、同期結果を切り分ける運用者、後続の `frontend-history-sync-ui` 実装者である。影響範囲は Rails backend の同期 command endpoint、同期 service、sync run schema 拡張、request / service spec に限定し、既存 session list/detail API の参照元切替や frontend ボタンは扱わない。
 
-### Goals
+### 目標
 - `POST /api/history/sync` で raw files から保存済み read model への同期を request 内で完了する。
 - `source_fingerprint` により insert / update / skip を判定し、同一 session の read model を重複保存しない。
 - `HistorySyncRun` に running、terminal status、件数、root failure、degraded completion を記録する。
 - root failure は失敗応答、session 単位の degraded は保存継続と `completed_with_issues` として区別する。
 - running lock により未完了同期中の二重実行を 409 conflict として拒否する。
 
-### Non-Goals
+### 対象外
 - background job、progress polling、自動 file watch、stale running 自動復旧
 - raw files 削除に伴う `CopilotSession` の自動削除
 - 既存 `GET /api/sessions` / `GET /api/sessions/:id` の DB query 化
 - frontend 同期ボタン、日付フィルタ、検索 UI
 - 認証・認可、外部公開向け hardening、同期履歴取得 API
 
-## Boundary Commitments
+## 境界の約束
 
-### This Spec Owns
+### この仕様が所有する範囲
 - `POST /api/history/sync` の route、controller、HTTP status、JSON 契約
 - 同期 request 内 orchestration、running conflict 判定、root failure と degraded completion の分岐
 - `NormalizedSession` から `CopilotSession` への insert / update / skip 判定と保存実行
@@ -29,7 +29,7 @@
 - `history_sync_runs` の `inserted_count` / `updated_count` / `running_lock_key` schema 拡張
 - 同期 API 向け presenter と service result contract
 
-### Out of Boundary
+### 境界外
 - `SessionCatalogReader` の raw file parse / normalization contract 変更
 - `CopilotSession` の表示 payload schema 変更、既存 presenter contract 変更
 - read model から消えた raw file session の削除、archive、missing 管理
@@ -37,7 +37,7 @@
 - frontend state 管理、表示文言、ユーザー操作導線
 - background queue、polling、file watch、crash 後の stale running 自動解消
 
-### Allowed Dependencies
+### 許可する依存
 - `CopilotHistory::SessionCatalogReader` と `ReadResult::Success` / `ReadResult::Failure`
 - `CopilotHistory::Types::NormalizedSession`, `ReadFailure`, `ReadIssue`
 - `CopilotHistory::Persistence::SessionRecordBuilder` と `SourceFingerprintBuilder`
@@ -46,7 +46,7 @@
 - Rails 8.1 API routing / controller / JSON render、ActiveRecord transaction、MySQL unique index
 - RSpec request spec、model spec、fixture helper
 
-### Revalidation Triggers
+### 再検証トリガー
 - `ReadResult`, `NormalizedSession`, `source_paths`, `source_fingerprint` の contract が変わる場合
 - `summary_payload` / `detail_payload` の保存 shape または presenter contract が変わる場合
 - 同期を request 内完了から background job / polling へ変更する場合
@@ -54,15 +54,15 @@
 - raw files を一次ソースから外す、または削除同期を導入する場合
 - 既存 session API が DB read model を参照元に切り替える場合
 
-## Architecture
+## アーキテクチャ
 
-### Existing Architecture Analysis
+### 既存アーキテクチャ分析
 - backend は Rails API mode で、HTTP 入口は `app/controllers/api`、domain logic は `backend/lib/copilot_history` に置く構成である。
 - `SessionCatalogReader` は root failure と session issue を分離済みで、同期 service は filesystem を直接触らずこの公開境界を使える。
 - `CopilotSession` は `session_id` unique の read model、`HistorySyncRun` は sync run status と基本 counts を保持済みである。
 - `SessionRecordBuilder` は `NormalizedSession` から保存 attributes を作るが、insert/update/skip 判定と保存実行は持たない。
 
-### Architecture Pattern & Boundary Map
+### アーキテクチャパターンと境界マップ
 
 ```mermaid
 graph TB
@@ -98,7 +98,7 @@ graph TB
 - New components rationale: service result type が成功 / conflict / failed を固定し、presenter が HTTP 契約 drift を防ぎ、schema 拡張が二重実行と count traceability を DB に固定する。
 - Steering compliance: Rails API、MySQL、RSpec、Docker Compose の既存標準に従い、新規 gem は追加しない。
 
-### Technology Stack
+### 技術スタック
 
 | Layer | Choice / Version | Role in Feature | Notes |
 |-------|------------------|-----------------|-------|
@@ -106,9 +106,9 @@ graph TB
 | Data / Storage | MySQL 9.7, ActiveRecord 8.1 | `CopilotSession` upsert、`HistorySyncRun` lifecycle、unique running lock | nullable unique index を利用 |
 | Infrastructure / Runtime | Docker Compose | migration / RSpec 実行環境 | 既存 backend container 標準に従う |
 
-## File Structure Plan
+## ファイル構成計画
 
-### Directory Structure
+### ディレクトリ構成
 ```text
 backend/
 ├── app/
@@ -151,7 +151,7 @@ backend/
                 └── sync_result_spec.rb                    # result union の public shape
 ```
 
-### Modified Files
+### 変更するファイル
 - `backend/config/routes.rb` — `post "history/sync" => "history_syncs#create"` を `api` namespace 内へ追加する。
 - `backend/app/models/history_sync_run.rb` — `inserted_count`, `updated_count`, `running_lock_key` の validation、不変条件、terminal status 時の lock 解放 contract を追加する。
 - `backend/lib/copilot_history/persistence/session_record_builder.rb` — `call(session:, indexed_at:, source_fingerprint: nil)` を受け取り、保存 attributes に同じ fingerprint を使う。
@@ -159,7 +159,7 @@ backend/
 - `backend/spec/lib/copilot_history/persistence/session_record_builder_spec.rb` — precomputed fingerprint が再計算されず保存値に使われることを検証する。
 - `backend/db/schema.rb` — migration 実行で `history_sync_runs` 拡張を反映する。
 
-### Created Files
+### 作成するファイル
 - `backend/app/controllers/api/history_syncs_controller.rb` — sync service を呼び、presenter が返す status/payload を render する。
 - `backend/db/migrate/YYYYMMDDHHMMSS_extend_history_sync_runs_for_api.rb` — `inserted_count`, `updated_count`, `running_lock_key` と unique index を追加する。
 - `backend/lib/copilot_history/api/presenters/history_sync_presenter.rb` — success/conflict/failure response を既存 error envelope 方針で整形する。
@@ -170,7 +170,7 @@ backend/
 - `backend/spec/lib/copilot_history/sync/history_sync_service_spec.rb` — service の判定と transaction 境界を検証する。
 - `backend/spec/lib/copilot_history/sync/sync_result_spec.rb` — result union の predicate と data shape を検証する。
 
-## System Flows
+## システムフロー
 
 ```mermaid
 sequenceDiagram
@@ -223,7 +223,7 @@ sequenceDiagram
     end
 ```
 
-### State Flow
+### 状態フロー
 
 ```mermaid
 stateDiagram-v2
@@ -243,7 +243,7 @@ stateDiagram-v2
 - degraded session は保存対象であり、issue 情報は既存 `SessionRecordBuilder` が作る payload と scalar counts に残る。
 - skip は `CopilotSession#source_fingerprint` 完全一致時だけ発生し、表示 payload と `indexed_at` を再保存しない。
 
-## Requirements Traceability
+## 要件トレーサビリティ
 
 | Requirement | Summary | Components | Interfaces | Flows |
 |-------------|---------|------------|------------|-------|
@@ -276,7 +276,7 @@ stateDiagram-v2
 | 6.4 | raw files から消えた session を自動削除しない | Boundary, `HistorySyncService` | no deletion operation | sync sequence |
 | 6.5 | 既存 session API の参照元切替を含めない | Boundary, File Structure Plan | no sessions controller changes | architecture |
 
-## Components and Interfaces
+## コンポーネントとインターフェース
 
 | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies (P0/P1) | Contracts |
 |-----------|--------------|--------|--------------|--------------------------|-----------|
@@ -289,7 +289,7 @@ stateDiagram-v2
 | `SessionRecordBuilder` | Persistence mapping | 保存が必要な session の attributes を生成する | 2.1, 2.2, 5.2 | existing presenters (P0), optional fingerprint (P1) | Service |
 | `SourceFingerprintBuilder` | Source metadata | skip/update 判定用 fingerprint を生成する | 2.2, 2.3 | filesystem stat (P0) | Service |
 
-### HTTP Layer
+### HTTP 層
 
 #### `Api::HistorySyncsController`
 
@@ -310,12 +310,12 @@ stateDiagram-v2
 
 **Contracts**: Service [ ] / API [x] / Event [ ] / Batch [ ] / State [ ]
 
-##### API Contract
+##### API 契約
 | Method | Endpoint | Request | Response | Errors |
 |--------|----------|---------|----------|--------|
 | POST | `/api/history/sync` | empty JSON or no body | `HistorySyncSuccessResponse` | 409, 503, 500 |
 
-##### API Response Contract
+##### API 応答契約
 成功時は HTTP 200 を返す。
 
 ```json
@@ -342,7 +342,7 @@ stateDiagram-v2
 
 失敗時は既存 error envelope 方針を維持し、sync run が存在する場合は `meta.sync_run` と `meta.counts` を付与する。
 
-### API Presentation
+### API 表現
 
 #### `HistorySyncPresenter`
 
@@ -363,14 +363,14 @@ stateDiagram-v2
 
 **Contracts**: Service [ ] / API [x] / Event [ ] / Batch [ ] / State [ ]
 
-##### Error Codes
+##### エラーコード
 | Code | HTTP | Details | Meaning |
 |------|------|---------|---------|
 | `history_sync_running` | 409 | `sync_run_id`, `started_at` | 既存 running sync がある |
 | upstream root code | 503 | `path` | root failure により同期不能 |
 | `history_sync_failed` | 500 | `sync_run_id`, `failure_class` | 永続化などの予期しない failure |
 
-### Sync Domain
+### 同期ドメイン
 
 #### `HistorySyncService`
 
@@ -397,7 +397,7 @@ stateDiagram-v2
 
 **Contracts**: Service [x] / API [ ] / Event [ ] / Batch [ ] / State [x]
 
-##### Service Interface
+##### サービスインターフェース
 ```ruby
 module CopilotHistory
   module Sync
@@ -412,7 +412,7 @@ end
 - Postconditions: conflict 以外では sync run が terminal status へ更新される。root failure では session row を変更しない。
 - Invariants: `saved_count == inserted_count + updated_count`、`processed_count == reader success sessions count`、skip 時は payload を再保存しない。
 
-##### Decision Rules
+##### 判定ルール
 | Condition | Action | Count Impact |
 |-----------|--------|--------------|
 | existing row absent | create `CopilotSession` | `inserted_count + 1`, `saved_count + 1` |
@@ -421,7 +421,7 @@ end
 | session has issues | continue save decision | `degraded_count + 1` |
 | reader returns failure | no session write | `failed_count = 1` |
 
-##### Transaction Strategy
+##### トランザクション戦略
 - running run creation is committed before reader execution so conflict state is visible to concurrent requests.
 - session create/update and successful terminal run update execute inside one ActiveRecord transaction.
 - root failure updates the run to `failed` without opening session mutation transaction.
@@ -442,7 +442,7 @@ end
 
 **Contracts**: Service [x] / API [ ] / Event [ ] / Batch [ ] / State [ ]
 
-##### Service Interface
+##### サービスインターフェース
 ```ruby
 module CopilotHistory
   module Sync
@@ -455,7 +455,7 @@ module CopilotHistory
 end
 ```
 
-### Persistence Models
+### 永続化モデル
 
 #### `HistorySyncRun`
 
@@ -477,12 +477,12 @@ end
 
 **Contracts**: Service [ ] / API [ ] / Event [ ] / Batch [ ] / State [x]
 
-##### State Management
+##### 状態管理
 - State model: 1 sync request 1 row。
 - Persistence & consistency: running row は nullable unique lock で同時 1 件に制限される。
 - Concurrency strategy: create running 時の unique violation を service が `Conflict` に変換する。
 
-##### Physical Data Additions
+##### 物理データ追加
 | Column | Type | Null | Default | Purpose |
 |--------|------|------|---------|---------|
 | `inserted_count` | integer | false | 0 | insert 判定件数 |
@@ -508,7 +508,7 @@ end
 
 **Contracts**: Service [ ] / API [ ] / Event [ ] / Batch [ ] / State [x]
 
-### Persistence Mapping
+### 永続化マッピング
 
 #### `SessionRecordBuilder`
 
@@ -524,7 +524,7 @@ end
 
 **Contracts**: Service [x] / API [ ] / Event [ ] / Batch [ ] / State [ ]
 
-##### Service Interface
+##### サービスインターフェース
 ```ruby
 def call(session:, indexed_at: Time.current, source_fingerprint: nil)
   # returns Hash of CopilotSession attributes
@@ -545,9 +545,9 @@ end
 
 **Contracts**: Service [x] / API [ ] / Event [ ] / Batch [ ] / State [ ]
 
-## Data Models
+## データモデル
 
-### Domain Model
+### ドメインモデル
 - Aggregate: `HistorySyncRun` が 1 回の同期実行境界を表す。running から terminal への遷移と counts はこの aggregate の不変条件である。
 - Entity: `CopilotSession` は `session_id` natural key の read model entity で、raw files から再生成可能である。
 - Value Object: `source_fingerprint` は source artifact metadata の比較値であり、raw file 本文の永続 hash ではない。
@@ -557,7 +557,7 @@ end
   - skip は payload と `indexed_at` を変更しない。
   - terminal run は lock を解放する。
 
-### Logical Data Model
+### 論理データモデル
 
 ```mermaid
 erDiagram
@@ -591,7 +591,7 @@ erDiagram
 - `CopilotSession.session_id` は unique natural key であり、同一 session の同期結果は最新 row に置換される。
 - `HistorySyncRun.running_lock_key` は running row の排他専用であり、terminal row では `nil` になる。
 
-### Physical Data Model
+### 物理データモデル
 
 `history_sync_runs` existing columns は維持し、以下を追加する。
 
@@ -604,9 +604,9 @@ add_index :history_sync_runs, :running_lock_key, unique: true
 
 `copilot_sessions` schema は変更しない。同期 service は既存 unique index `index_copilot_sessions_on_session_id` を使って重複保存を防ぐ。
 
-### Data Contracts & Integration
+### データ契約と統合
 
-#### Success Response
+#### 成功応答
 | Field | Type | Rule |
 |-------|------|------|
 | `data.sync_run.id` | integer | persisted run id |
@@ -621,22 +621,22 @@ add_index :history_sync_runs, :running_lock_key, unique: true
 | `data.counts.failed_count` | integer | root/persistence failure count, success path is 0 |
 | `data.counts.degraded_count` | integer | sessions with issues |
 
-#### Error Response
+#### エラー応答
 | Scenario | HTTP | Code | Details |
 |----------|------|------|---------|
 | running conflict | 409 | `history_sync_running` | `sync_run_id`, `started_at` |
 | root missing/unreadable | 503 | upstream root failure code | `path` |
 | unexpected persistence failure | 500 | `history_sync_failed` | `sync_run_id`, `failure_class` |
 
-## Error Handling
+## エラーハンドリング
 
-### Error Strategy
+### エラー戦略
 - Root failure: reader `ReadResult::Failure` を受けたら run を `failed` にし、session write を行わず 503 を返す。
 - Degraded session: `session.issues.any?` を degraded count に加算し、保存を継続して 200 `completed_with_issues` を返す。
 - Running conflict: DB unique lock 競合または既存 running row 検出を 409 に変換し、既存 running row は変更しない。
 - Persistence failure: session transaction を rollback し、可能な限り run を `failed` にして 500 を返す。
 
-### Error Categories and Responses
+### エラーカテゴリと応答
 | Category | Trigger | Response | Recovery |
 |----------|---------|----------|----------|
 | User or environment | history root missing/unreadable | 503 root failure envelope | `COPILOT_HOME` / mount / permission を修正して再実行 |
@@ -644,45 +644,45 @@ add_index :history_sync_runs, :running_lock_key, unique: true
 | Partial data | session issue exists | 200 `completed_with_issues` | issue payload を確認 |
 | System | DB validation/connection failure | 500 `history_sync_failed` | backend logs と DB state を確認 |
 
-### Monitoring
+### 監視
 - `HistorySyncService` は root failure と persistence failure を Rails logger に structured hash で記録する。
 - sync run row は `status`, `failure_summary`, `degradation_summary`, counts により、DB が空なのか同期失敗なのかを切り分けるための一次運用情報になる。
 
-## Testing Strategy
+## テスト戦略
 
-### Unit Tests
+### 単体テスト
 - `HistorySyncService` が未保存 session を insert として保存し、`inserted_count`, `saved_count`, `processed_count` を更新することを検証する。
 - `HistorySyncService` が fingerprint 差分 session を update、一致 session を skip として扱い、skip 時に `summary_payload`, `detail_payload`, `indexed_at` を変更しないことを検証する。
 - `HistorySyncService` が `ReadResult::Failure` で session write を行わず、run を `failed`、`failed_count = 1` にすることを検証する。
 - `HistorySyncService` が degraded session を保存し、`completed_with_issues` と `degraded_count` を記録することを検証する。
 - `HistorySyncPresenter` が success、conflict、root failure、persistence failure を正しい HTTP status と JSON shape に変換することを検証する。
 
-### Integration Tests
+### 統合テスト
 - `POST /api/history/sync` が mixed current/legacy fixture を read model に保存し、200 success response と `HistorySyncRun` terminal row を返すことを検証する。
 - 同じ fixture を再同期したとき、fingerprint 一致 session が skip になり payload が再保存されないことを検証する。
 - fixture の raw file を変更した後の再同期で update count が増え、同じ `session_id` の row が重複しないことを検証する。
 - root missing fixture で 503 error envelope、failed run、`CopilotSession.count == 0` を検証する。
 - running row が存在する状態で POST したとき、409 conflict を返し既存 running row を上書きしないことを検証する。
 
-### Performance and Concurrency Tests
+### パフォーマンスと並行性テスト
 - running lock の unique index により、同時 running 作成が 1 件だけ成功し、もう一方が conflict result になることを model/service spec で検証する。
 - 大量 session fixture を使う場合は、processed/saved/skipped/degraded counts が session 数と一致し、N+1 的な追加 DB query が設計上増えないことを確認する。
 
-### E2E/UI Tests
+### E2E/UI テスト
 - この feature は frontend を変更しないため E2E/UI test は追加しない。後続 `frontend-history-sync-ui` がこの API 契約に基づく UI flow を検証する。
 
-## Security Considerations
+## セキュリティ考慮事項
 - API はローカル backend 前提で、認証・認可は scope 外である。
 - raw files は read-only source として扱い、同期 API は filesystem への write/delete を行わない。
 - error response の details は既存 session API と同様に local path を含むため、外部公開する場合は認証・path redaction の revalidation が必要である。
 
-## Performance & Scalability
+## パフォーマンスとスケーラビリティ
 - 初期実装は request 内同期であり、履歴数に比例して latency が増える。
 - skip 判定は fingerprint 比較を先に行い、unchanged session では presenter payload の再生成と DB write を避ける。
 - `session_id` unique index と `running_lock_key` unique index を使い、主要な lookup と conflict 判定を DB 側で保証する。
 - background 化、chunking、progress polling は要件外であり、履歴量が request timeout を超える場合の revalidation trigger とする。
 
-## Migration Strategy
+## マイグレーション戦略
 
 ```mermaid
 flowchart TB

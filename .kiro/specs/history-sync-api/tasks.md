@@ -1,4 +1,4 @@
-# Implementation Plan
+# 実装計画
 
 - [ ] 1. 同期実行の永続化基盤を拡張する
 - [x] 1.1 同期実行に insert/update 件数と running lock を保存できるようにする
