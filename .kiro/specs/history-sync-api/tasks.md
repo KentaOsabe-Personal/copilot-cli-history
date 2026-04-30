@@ -41,7 +41,7 @@
   - _Boundary: HistorySyncPresenter_
 
 - [ ] 3. request 内で完了する同期 service を実装する
-- [ ] 3.1 同期開始時に running run を作成し、二重実行を conflict に変換する
+- [x] 3.1 同期開始時に running run を作成し、二重実行を conflict に変換する
   - reader を呼ぶ前に running sync run を作成し、同時実行中であることを DB state として観測できる
   - 既存 running row または unique lock 競合がある場合は、新しい run を開始せず conflict 結果を返す
   - conflict 時も既存 running row の status、started_at、counts が変わらないことを spec で確認できる
@@ -49,7 +49,7 @@
   - _Requirements: 3.1, 6.1, 6.2, 6.3_
   - _Boundary: HistorySyncService, HistorySyncRun_
 
-- [ ] 3.2 root failure を failed run と失敗結果に変換する
+- [x] 3.2 root failure を failed run と失敗結果に変換する
   - reader が root failure を返した場合、session 保存へ進まず run を failed、終了時刻付き、failed count 付きに更新する
   - failed run には原因を識別できる failure summary と lock 解放状態を残す
   - root failure では read model が空データで上書きされず、既存 session row も変更されないことを確認できる
@@ -58,7 +58,7 @@
   - _Requirements: 3.4, 4.1, 4.2, 4.3, 4.4, 4.5_
   - _Boundary: HistorySyncService, HistorySyncRun_
 
-- [ ] 3.3 read success 時に insert/update/skip 判定と read model 保存を行う
+- [x] 3.3 read success 時に insert/update/skip 判定と read model 保存を行う
   - raw files から読めた session ごとに source fingerprint を一度計算し、未保存 session は insert、差分あり session は update、一致 session は skip に分類する
   - insert/update のみ保存属性を生成して read model を変更し、skip では表示 payload と indexed timestamp を再保存しない
   - 同じ session ID の再同期では read model が重複せず、最新 row として参照できる
@@ -67,7 +67,7 @@
   - _Requirements: 1.1, 1.4, 2.1, 2.2, 2.3, 2.4, 2.5, 6.4_
   - _Boundary: HistorySyncService, CopilotSession_
 
-- [ ] 3.4 degraded session を保存継続し、completed_with_issues として完了させる
+- [x] 3.4 degraded session を保存継続し、completed_with_issues として完了させる
   - session 単位の issue がある場合も読めた session の同期を継続し、保存対象であれば degraded state と issue 情報を read model に残す
   - degraded session が 1 件以上ある完了は completed_with_issues、degraded がない完了は succeeded として terminal run に記録する
   - degraded count と degradation summary が run と成功 payload の両方から確認できる
@@ -76,7 +76,7 @@
   - _Requirements: 3.2, 3.3, 3.5, 5.1, 5.2, 5.3, 5.4_
   - _Boundary: HistorySyncService, HistorySyncRun, CopilotSession_
 
-- [ ] 3.5 永続化失敗時に部分保存を rollback し、run を failed として終了させる
+- [x] 3.5 永続化失敗時に部分保存を rollback し、run を failed として終了させる
   - session 保存中の予期しない永続化失敗では session mutation を rollback し、可能な限り run を failed、終了時刻付き、lock 解放済みに更新する
   - 失敗結果には sync run と failure class が含まれ、presenter が 500 応答を作れる
   - 失敗した同期の後に新しい同期要求を開始できる状態になっていることを確認できる
