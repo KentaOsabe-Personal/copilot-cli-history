@@ -18,8 +18,8 @@
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
   - _Boundary: HistorySyncRun_
 
-- [ ] 2. 保存モデルの契約を実装する
-- [ ] 2.1 セッション read model の保存 validation を実装する
+- [x] 2. 保存モデルの契約を実装する
+- [x] 2.1 セッション read model の保存 validation を実装する
   - セッション ID、source format、source state、payload、source metadata、indexed timestamp の必須性を検証する。
   - source format と source state は設計で定義された値だけを許可する。
   - 件数は 0 以上の整数として検証し、履歴由来日時は両方欠落しても valid な状態として扱う。
@@ -28,7 +28,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.5, 5.1, 5.2, 5.3, 5.4, 6.2_
   - _Boundary: CopilotSession_
 
-- [ ] 2.2 (P) 同期実行結果の保存 validation を実装する
+- [x] 2.2 (P) 同期実行結果の保存 validation を実装する
   - running、succeeded、failed、completed_with_issues の状態だけを許可する。
   - running では完了時刻を任意にし、終了状態では完了時刻を必須にする。
   - 各 count は 0 以上の整数として検証し、failure / degradation summary は必要な状態で保持できる。
@@ -37,7 +37,7 @@
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
   - _Boundary: HistorySyncRun_
 
-- [ ] 2.3 (P) source artifact の fingerprint 生成契約を実装する
+- [x] 2.3 (P) source artifact の fingerprint 生成契約を実装する
   - role ごとの source path から path、更新時刻、size、status を含む比較材料を生成する。
   - すべての artifact metadata を取得できた場合だけ complete を true にする。
   - missing / unreadable な artifact は例外で処理を止めず、不完全 fingerprint として識別できる状態にする。

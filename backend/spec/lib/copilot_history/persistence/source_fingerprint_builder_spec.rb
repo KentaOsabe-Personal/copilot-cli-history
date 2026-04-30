@@ -1,0 +1,77 @@
+require "rails_helper"
+
+RSpec.describe CopilotHistory::Persistence::SourceFingerprintBuilder do
+  around do |example|
+    Dir.mktmpdir("source-fingerprint") do |dir|
+      @tmpdir = Pathname.new(dir)
+      example.run
+    end
+  end
+
+  it "returns a complete deterministic fingerprint for readable artifacts" do
+    path = @tmpdir.join("events.jsonl")
+    path.write("one\n")
+    mtime = Time.zone.parse("2026-04-30 03:00:00").to_time
+    File.utime(mtime, mtime, path)
+
+    first = described_class.new.call(source_paths: { events: path })
+    second = described_class.new.call(source_paths: { events: path })
+
+    expect(first).to eq(second)
+    expect(first).to include(
+      "complete" => true,
+      "artifacts" => {
+        "events" => include(
+          "path" => path.to_s,
+          "mtime" => "2026-04-30T03:00:00Z",
+          "size" => 4,
+          "status" => "ok"
+        )
+      }
+    )
+  end
+
+  it "changes when source metadata changes" do
+    path = @tmpdir.join("workspace.yaml")
+    path.write("cwd: /work\n")
+    original = described_class.new.call(source_paths: { workspace: path })
+
+    path.write("cwd: /work\nmodel: gpt-5\n")
+    mtime = Time.zone.parse("2026-04-30 03:05:00").to_time
+    File.utime(mtime, mtime, path)
+    changed = described_class.new.call(source_paths: { workspace: path })
+
+    expect(changed).not_to eq(original)
+    expect(changed.dig("artifacts", "workspace", "size")).not_to eq(original.dig("artifacts", "workspace", "size"))
+  end
+
+  it "marks missing artifacts as incomplete without raising" do
+    missing_path = @tmpdir.join("missing.json")
+
+    fingerprint = described_class.new.call(source_paths: { source: missing_path })
+
+    expect(fingerprint).to include("complete" => false)
+    expect(fingerprint.dig("artifacts", "source")).to include(
+      "path" => missing_path.to_s,
+      "mtime" => nil,
+      "size" => nil,
+      "status" => "missing"
+    )
+  end
+
+  it "marks unreadable artifacts as incomplete without raising" do
+    unreadable_path = @tmpdir.join("unreadable.json")
+    unreadable_path.write("{}")
+    allow_any_instance_of(Pathname).to receive(:stat).and_raise(Errno::EACCES)
+
+    fingerprint = described_class.new.call(source_paths: { source: unreadable_path })
+
+    expect(fingerprint).to include("complete" => false)
+    expect(fingerprint.dig("artifacts", "source")).to include(
+      "path" => unreadable_path.to_s,
+      "mtime" => nil,
+      "size" => nil,
+      "status" => "unreadable"
+    )
+  end
+end
