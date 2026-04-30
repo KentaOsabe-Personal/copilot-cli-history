@@ -69,10 +69,13 @@ RSpec.describe "history read model schema" do
         "finished_at",
         "status",
         "processed_count",
+        "inserted_count",
+        "updated_count",
         "saved_count",
         "skipped_count",
         "failed_count",
         "degraded_count",
+        "running_lock_key",
         "failure_summary",
         "degradation_summary"
       )
@@ -81,18 +84,22 @@ RSpec.describe "history read model schema" do
       expect(columns["finished_at"].null).to be(true)
       expect(columns["status"].null).to be(false)
       expect(columns["processed_count"].default).to eq(0)
+      expect(columns["inserted_count"].default).to eq(0)
+      expect(columns["updated_count"].default).to eq(0)
       expect(columns["saved_count"].default).to eq(0)
       expect(columns["skipped_count"].default).to eq(0)
       expect(columns["failed_count"].default).to eq(0)
       expect(columns["degraded_count"].default).to eq(0)
+      expect(columns["running_lock_key"].null).to be(true)
     end
 
-    it "defines status and started_at indexes" do
+    it "defines status, started_at, and running lock indexes" do
       indexes = ActiveRecord::Base.connection.indexes(:history_sync_runs)
 
       expect(indexes).to include(
         have_attributes(columns: [ "status" ]),
-        have_attributes(columns: [ "started_at" ])
+        have_attributes(columns: [ "started_at" ]),
+        have_attributes(columns: [ "running_lock_key" ], unique: true)
       )
     end
   end

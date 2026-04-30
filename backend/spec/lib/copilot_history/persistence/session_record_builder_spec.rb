@@ -204,6 +204,67 @@ RSpec.describe CopilotHistory::Persistence::SessionRecordBuilder do
       expect(CopilotSession.where(session_id: "replaceable-session")).not_to exist
       expect(regenerated_attributes.keys).not_to include(:skip, :upsert, :delete, :raw_files_primary_source)
     end
+
+    it "uses a precomputed source fingerprint when provided" do
+      source_path = write_source("current/events.jsonl", "{}\n")
+      precomputed_fingerprint = {
+        "complete" => true,
+        "artifacts" => {
+          "events" => {
+            "path" => source_path.to_s,
+            "mtime" => "2026-04-30T00:00:00Z",
+            "size" => 3,
+            "status" => "ok"
+          }
+        }
+      }
+      fingerprint_builder = instance_double(
+        CopilotHistory::Persistence::SourceFingerprintBuilder,
+        call: { "complete" => false, "artifacts" => {} }
+      )
+      session = build_session(
+        session_id: "precomputed-fingerprint-session",
+        source_format: :current,
+        source_paths: { events: source_path },
+        events: [
+          build_event(sequence: 1, raw_type: "user.message", occurred_at: "2026-04-28T01:00:00Z", role: "user", content: "hello")
+        ]
+      )
+
+      attributes = described_class.new(fingerprint_builder:).call(
+        session:,
+        indexed_at: Time.zone.parse("2026-04-30 12:00:00"),
+        source_fingerprint: precomputed_fingerprint
+      )
+
+      expect(attributes.fetch(:source_fingerprint)).to eq(precomputed_fingerprint)
+      expect(fingerprint_builder).not_to have_received(:call)
+    end
+
+    it "computes the source fingerprint when none is provided" do
+      source_path = write_source("current/events.jsonl", "{}\n")
+      computed_fingerprint = { "complete" => true, "artifacts" => { "events" => { "status" => "ok" } } }
+      fingerprint_builder = instance_double(
+        CopilotHistory::Persistence::SourceFingerprintBuilder,
+        call: computed_fingerprint
+      )
+      session = build_session(
+        session_id: "computed-fingerprint-session",
+        source_format: :current,
+        source_paths: { events: source_path },
+        events: [
+          build_event(sequence: 1, raw_type: "user.message", occurred_at: "2026-04-28T01:00:00Z", role: "user", content: "hello")
+        ]
+      )
+
+      attributes = described_class.new(fingerprint_builder:).call(
+        session:,
+        indexed_at: Time.zone.parse("2026-04-30 12:00:00")
+      )
+
+      expect(attributes.fetch(:source_fingerprint)).to eq(computed_fingerprint)
+      expect(fingerprint_builder).to have_received(:call).with(source_paths: session.source_paths)
+    end
   end
 
   def write_source(relative_path, content)
