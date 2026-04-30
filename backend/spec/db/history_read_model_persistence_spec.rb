@@ -87,6 +87,8 @@ RSpec.describe "history read model persistence" do
         finished_at: Time.zone.parse("2026-04-30 03:00:02"),
         status: "failed",
         processed_count: 0,
+        inserted_count: 0,
+        updated_count: 0,
         saved_count: 0,
         skipped_count: 0,
         failed_count: 1,
@@ -108,6 +110,8 @@ RSpec.describe "history read model persistence" do
         finished_at: Time.zone.parse("2026-04-30 03:00:03"),
         status: "succeeded",
         processed_count: 2,
+        inserted_count: 1,
+        updated_count: 1,
         saved_count: 2
       )
       completed_with_issues = HistorySyncRun.create!(
@@ -115,6 +119,8 @@ RSpec.describe "history read model persistence" do
         finished_at: Time.zone.parse("2026-04-30 03:05:03"),
         status: "completed_with_issues",
         processed_count: 2,
+        inserted_count: 2,
+        updated_count: 0,
         saved_count: 2,
         degraded_count: 1,
         degradation_summary: "1 session degraded"
@@ -123,6 +129,35 @@ RSpec.describe "history read model persistence" do
       expect(HistorySyncRun.where(status: "succeeded")).to contain_exactly(succeeded)
       expect(HistorySyncRun.where(status: "completed_with_issues")).to contain_exactly(completed_with_issues)
       expect(completed_with_issues.degradation_summary).to eq("1 session degraded")
+    end
+
+    it "allows multiple terminal rows while enforcing one active running lock" do
+      started_at = Time.zone.parse("2026-04-30 03:00:00")
+
+      HistorySyncRun.create!(
+        started_at: started_at,
+        finished_at: started_at + 1.second,
+        status: "succeeded"
+      )
+      HistorySyncRun.create!(
+        started_at: started_at + 2.seconds,
+        finished_at: started_at + 3.seconds,
+        status: "failed",
+        failed_count: 1
+      )
+      HistorySyncRun.create!(
+        started_at: started_at + 4.seconds,
+        status: "running",
+        running_lock_key: "history-sync"
+      )
+
+      expect {
+        HistorySyncRun.create!(
+          started_at: started_at + 5.seconds,
+          status: "running",
+          running_lock_key: "history-sync"
+        )
+      }.to raise_error(ActiveRecord::RecordNotUnique)
     end
   end
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_30_030100) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_30_065000) do
   create_table "copilot_sessions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.integer "activity_count", default: 0, null: false
     t.string "branch"
@@ -52,12 +52,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_30_030100) do
     t.integer "failed_count", default: 0, null: false
     t.text "failure_summary"
     t.datetime "finished_at"
+    t.integer "inserted_count", default: 0, null: false
     t.integer "processed_count", default: 0, null: false
+    t.string "running_lock_key"
     t.integer "saved_count", default: 0, null: false
     t.integer "skipped_count", default: 0, null: false
     t.datetime "started_at", null: false
     t.string "status", null: false
     t.datetime "updated_at", null: false
+    t.integer "updated_count", default: 0, null: false
+    t.index ["running_lock_key"], name: "index_history_sync_runs_on_running_lock_key", unique: true
     t.index ["started_at"], name: "index_history_sync_runs_on_started_at"
     t.index ["status"], name: "index_history_sync_runs_on_status"
   end

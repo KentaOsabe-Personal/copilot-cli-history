@@ -11,7 +11,7 @@ module CopilotHistory
         @fingerprint_builder = fingerprint_builder
       end
 
-      def call(session:, indexed_at: Time.current)
+      def call(session:, indexed_at: Time.current, source_fingerprint: nil)
         summary_payload = build_summary_payload(session)
         detail_payload = build_detail_payload(session)
         conversation_summary = summary_payload.fetch(:conversation_summary, {})
@@ -35,7 +35,7 @@ module CopilotHistory
           message_count: conversation_summary.fetch(:message_count, 0),
           activity_count: conversation_summary.fetch(:activity_count, 0),
           source_paths: stringify_source_paths(session.source_paths),
-          source_fingerprint: fingerprint_builder.call(source_paths: session.source_paths),
+          source_fingerprint: source_fingerprint || fingerprint_builder.call(source_paths: session.source_paths),
           summary_payload: summary_payload,
           detail_payload: detail_payload,
           indexed_at: indexed_at
