@@ -128,8 +128,8 @@
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
   - _Boundary: HistorySyncRun_
 
-- [ ] 5. バックエンド検証を通して実装完了状態を確認する
-- [ ] 5.1 DB schema と backend spec suite を標準実行環境で確認する
+- [x] 5. バックエンド検証を通して実装完了状態を確認する
+- [x] 5.1 DB schema と backend spec suite を標準実行環境で確認する
   - Docker Compose 経由で migration と backend spec を実行し、永続化 schema と保存 contract が同じ環境で通ることを確認する。
   - 必要に応じて backend 品質確認コマンドを実行し、lint / security check / spec の既存標準から外れていないことを確認する。
   - 完了時には、実行した検証コマンドと結果が implementation handoff で報告できる状態になる。
