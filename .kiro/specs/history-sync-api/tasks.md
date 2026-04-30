@@ -85,7 +85,7 @@
   - _Boundary: HistorySyncService, HistorySyncRun_
 
 - [ ] 4. HTTP endpoint と同期 service を統合する
-- [ ] 4.1 明示同期用の POST endpoint を追加し、service result を presenter 経由で返す
+- [x] 4.1 明示同期用の POST endpoint を追加し、service result を presenter 経由で返す
   - 明示 POST request が request body なしでも同期 service を 1 回だけ起動する
   - controller は reader、fingerprint、DB 判定を直接持たず、service result と presenter の status/payload を render する
   - 初期実装では background job、progress polling、自動 file watch を起動せず、既存 session list/detail API の参照元も変更しない
@@ -94,7 +94,7 @@
   - _Requirements: 1.2, 4.2, 6.3, 6.5_
   - _Boundary: Api::HistorySyncsController, HistorySyncPresenter_
 
-- [ ] 4.2 request spec で成功系と再同期系の API 契約を固定する
+- [x] 4.2 request spec で成功系と再同期系の API 契約を固定する
   - mixed current/legacy fixture の POST で read model に session が保存され、200 response と terminal sync run が返る
   - 同じ fixture の再同期では fingerprint 一致 session が skip になり、payload と indexed timestamp が変わらない
   - raw file 変更後の再同期では update count が増え、同じ session ID の row が重複しない
@@ -103,7 +103,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4, 2.5, 3.2, 3.5_
   - _Boundary: Request Specs, HistorySyncService, CopilotSession, HistorySyncRun_
 
-- [ ] 4.3 request spec で failure、degraded、conflict の API 契約を固定する
+- [x] 4.3 request spec で failure、degraded、conflict の API 契約を固定する
   - root missing/unreadable fixture で 503 error envelope、failed run、session write なしを確認できる
   - degraded fixture で 200 completed_with_issues、degraded count、保存済み issue 情報を確認できる
   - running row が存在する状態の POST で 409 error envelope が返り、既存 running row が上書きされない

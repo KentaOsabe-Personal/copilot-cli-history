@@ -6,6 +6,7 @@ Rails.application.routes.draw do
   get "up" => "rails/health#show", as: :rails_health_check
 
   namespace :api do
+    post "history/sync" => "history_syncs#create"
     resources :sessions, only: %i[index show]
   end
 end
