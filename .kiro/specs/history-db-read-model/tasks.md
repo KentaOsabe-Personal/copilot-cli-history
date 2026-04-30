@@ -73,8 +73,8 @@
   - _Requirements: 1.1, 1.2, 2.3, 3.6, 6.1, 6.2, 6.3, 6.4, 6.5_
   - _Boundary: SessionRecordBuilder, CopilotSession_
 
-- [ ] 4. 保存 contract のテストを追加する
-- [ ] 4.1 セッション read model の validation と日付欠落を検証する
+- [x] 4. 保存 contract のテストを追加する
+- [x] 4.1 セッション read model の validation と日付欠落を検証する
   - 必須 payload、source format / state、非負の件数、session ID uniqueness を検証する。
   - 履歴由来日時が両方欠落しても保存可能で、保存レコード日時で暗黙補完されないことを検証する。
   - issue を含む read model の劣化状態と issue 数を検証する。
@@ -83,7 +83,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.4, 5.1, 5.2, 5.3, 5.4, 6.2_
   - _Boundary: CopilotSession_
 
-- [ ] 4.2 (P) 同期実行結果の validation を検証する
+- [x] 4.2 (P) 同期実行結果の validation を検証する
   - 状態ごとの完了時刻ルールと count の非負制約を検証する。
   - session row がない状態でも failed run を保存できることを検証する。
   - 完全成功と部分劣化を別 status として保存できることを検証する。
@@ -92,7 +92,7 @@
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
   - _Boundary: HistorySyncRun_
 
-- [ ] 4.3 (P) source fingerprint の安定性と不完全状態を検証する
+- [x] 4.3 (P) source fingerprint の安定性と不完全状態を検証する
   - 同じ path / 更新時刻 / size で同じ fingerprint が返ることを検証する。
   - 更新時刻または size が変わると fingerprint が区別できることを検証する。
   - missing / unreadable artifact が complete false と artifact status で表現されることを検証する。
@@ -101,7 +101,7 @@
   - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6_
   - _Boundary: SourceFingerprintBuilder_
 
-- [ ] 4.4 (P) セッション保存 attributes の生成を current / legacy / degraded ケースで検証する
+- [x] 4.4 (P) セッション保存 attributes の生成を current / legacy / degraded ケースで検証する
   - current 形式と legacy 形式の正規化済みセッションから共通の保存 attributes が生成されることを検証する。
   - 一覧 payload、詳細 payload、source paths、fingerprint、件数、issue 情報が保存 attributes に含まれることを検証する。
   - 履歴由来日時の欠落が補完されず、日付不明として query 側が識別できる材料を残すことを検証する。
@@ -110,7 +110,7 @@
   - _Requirements: 1.3, 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 5.1, 5.2, 6.1, 6.3_
   - _Boundary: SessionRecordBuilder_
 
-- [ ] 4.5 read model の永続化 integration を検証する
+- [x] 4.5 read model の永続化 integration を検証する
   - migration 適用後に unique session ID と日付 / metadata index が利用できることを検証する。
   - current / legacy の保存 attributes を同じ read model table に保存し、payload と source metadata を再読取なしで取得できることを検証する。
   - 同じ session ID の再生成 attributes で既存 row を更新でき、重複 row が作られないことを検証する。
@@ -119,7 +119,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.5, 2.3, 2.5, 5.1, 5.2, 5.3, 5.4, 6.1, 6.2_
   - _Boundary: CopilotSession, SessionRecordBuilder_
 
-- [ ] 4.6 sync run の永続化 integration を検証する
+- [x] 4.6 sync run の永続化 integration を検証する
   - session row が存在しない root failure を failed run として保存できることを検証する。
   - 劣化を含む完了 run と完全成功 run を別状態で取得できることを検証する。
   - run record が session row の有無と独立して運用確認に使えることを検証する。
