@@ -1,0 +1,261 @@
+require "rails_helper"
+
+RSpec.describe CopilotHistory::Persistence::SessionRecordBuilder do
+  around do |example|
+    Dir.mktmpdir("session-record-builder") do |dir|
+      @tmpdir = Pathname.new(dir)
+      example.run
+    end
+  end
+
+  describe "#call" do
+    it "reuses existing presenter payloads as summary and detail snapshots without raw payloads" do
+      events_path = write_source("current/events.jsonl", "{\"type\":\"assistant.message\"}\n")
+      workspace_path = write_source("current/workspace.yaml", "cwd: /workspace/current\n")
+      session = build_session(
+        session_id: "current-session",
+        source_format: :current,
+        source_state: :complete,
+        created_at: "2026-04-28T01:00:00Z",
+        updated_at: "2026-04-28T01:02:00Z",
+        source_paths: {
+          workspace: workspace_path,
+          events: events_path
+        },
+        events: [
+          build_event(
+            sequence: 1,
+            raw_type: "assistant.message",
+            occurred_at: "2026-04-28T01:00:04Z",
+            role: "assistant",
+            content: "I can inspect sessions.",
+            raw_payload: { "type" => "assistant.message", "content" => "raw should stay out" }
+          )
+        ]
+      )
+
+      attributes = described_class.new.call(session:, indexed_at: Time.zone.parse("2026-04-30 12:00:00"))
+
+      expect(attributes.fetch(:summary_payload)).to include(
+        id: "current-session",
+        source_format: "current",
+        conversation_summary: {
+          has_conversation: true,
+          message_count: 1,
+          preview: "I can inspect sessions.",
+          activity_count: 0
+        },
+        degraded: false
+      )
+      expect(attributes.fetch(:detail_payload)).to include(
+        id: "current-session",
+        raw_included: false,
+        conversation: include(message_count: 1),
+        timeline: [
+          include(
+            sequence: 1,
+            raw_payload: nil
+          )
+        ]
+      )
+    end
+
+    it "maps session scalars, source metadata, counts, and source dates into valid read model attributes" do
+      events_path = write_source("current/events.jsonl", "{}\n")
+      workspace_path = write_source("current/workspace.yaml", "cwd: /workspace/current\n")
+      issue = CopilotHistory::Types::ReadIssue.new(
+        code: CopilotHistory::Errors::ReadErrorCode::EVENT_PARTIAL_MAPPING,
+        message: "event payload matched partially",
+        source_path: events_path,
+        sequence: 2,
+        severity: :warning
+      )
+      indexed_at = Time.zone.parse("2026-04-30 12:00:00")
+      session = build_session(
+        session_id: "degraded-current",
+        source_format: :current,
+        source_state: :degraded,
+        cwd: "/workspace/current",
+        git_root: "/workspace/current",
+        repository: "octo/example",
+        branch: "feature/history-db",
+        created_at: "2026-04-28T01:00:00Z",
+        updated_at: "2026-04-28T01:02:00Z",
+        selected_model: "gpt-5-current",
+        source_paths: {
+          workspace: workspace_path,
+          events: events_path
+        },
+        events: [
+          build_event(sequence: 1, raw_type: "user.message", occurred_at: "2026-04-28T01:00:01Z", role: "user", content: "hello"),
+          build_event(sequence: 2, raw_type: "assistant.message", occurred_at: "2026-04-28T01:00:02Z", role: "assistant", content: "hi")
+        ],
+        message_snapshots: [
+          CopilotHistory::Types::MessageSnapshot.new(role: "assistant", content: "hi", raw_payload: { "content" => "hi" })
+        ],
+        issues: [ issue ]
+      )
+
+      attributes = described_class.new.call(session:, indexed_at:)
+
+      expect(attributes).to include(
+        session_id: "degraded-current",
+        source_format: "current",
+        source_state: "degraded",
+        created_at_source: Time.iso8601("2026-04-28T01:00:00Z"),
+        updated_at_source: Time.iso8601("2026-04-28T01:02:00Z"),
+        cwd: "/workspace/current",
+        git_root: "/workspace/current",
+        repository: "octo/example",
+        branch: "feature/history-db",
+        selected_model: "gpt-5-current",
+        event_count: 2,
+        message_snapshot_count: 1,
+        issue_count: 1,
+        degraded: true,
+        conversation_preview: "hello",
+        message_count: 2,
+        activity_count: 0,
+        source_paths: {
+          "workspace" => workspace_path.to_s,
+          "events" => events_path.to_s
+        },
+        indexed_at: indexed_at
+      )
+      expect(attributes.fetch(:source_fingerprint)).to include(
+        "complete" => true,
+        "artifacts" => include(
+          "workspace" => include("path" => workspace_path.to_s, "status" => "ok"),
+          "events" => include("path" => events_path.to_s, "status" => "ok")
+        )
+      )
+      expect(CopilotSession.new(attributes)).to be_valid
+    end
+
+    it "preserves missing history dates and maps legacy sessions through the shared contract" do
+      source_path = write_source("legacy/session.json", "{}")
+      session = build_session(
+        session_id: "legacy-session",
+        source_format: :legacy,
+        source_state: :complete,
+        created_at: nil,
+        updated_at: nil,
+        selected_model: "gpt-5.4",
+        source_paths: {
+          source: source_path
+        },
+        events: [
+          build_event(sequence: 1, raw_type: "assistant_message", occurred_at: nil, role: "assistant", content: "legacy answer")
+        ]
+      )
+
+      attributes = described_class.new.call(session:, indexed_at: Time.zone.parse("2026-04-30 12:00:00"))
+
+      expect(attributes).to include(
+        session_id: "legacy-session",
+        source_format: "legacy",
+        source_state: "complete",
+        created_at_source: nil,
+        updated_at_source: nil,
+        selected_model: "gpt-5.4",
+        source_paths: {
+          "source" => source_path.to_s
+        },
+        conversation_preview: "legacy answer",
+        message_count: 1
+      )
+      expect(attributes.fetch(:summary_payload)).to include(
+        id: "legacy-session",
+        source_format: "legacy",
+        created_at: nil,
+        updated_at: nil
+      )
+      expect(CopilotSession.new(attributes)).to be_valid
+    end
+
+    it "returns replaceable attributes and does not persist records or make sync decisions" do
+      source_path = write_source("current/events.jsonl", "{}\n")
+      indexed_at = Time.zone.parse("2026-04-30 12:00:00")
+      original = build_session(
+        session_id: "replaceable-session",
+        source_format: :current,
+        updated_at: "2026-04-28T01:00:00Z",
+        source_paths: { events: source_path },
+        events: [
+          build_event(sequence: 1, raw_type: "user.message", occurred_at: "2026-04-28T01:00:00Z", role: "user", content: "first")
+        ]
+      )
+      regenerated = build_session(
+        session_id: "replaceable-session",
+        source_format: :current,
+        updated_at: "2026-04-28T01:05:00Z",
+        source_paths: { events: source_path },
+        events: [
+          build_event(sequence: 1, raw_type: "user.message", occurred_at: "2026-04-28T01:05:00Z", role: "user", content: "updated")
+        ]
+      )
+
+      original_attributes = described_class.new.call(session: original, indexed_at:)
+      regenerated_attributes = described_class.new.call(session: regenerated, indexed_at:)
+
+      expect(original_attributes.fetch(:session_id)).to eq(regenerated_attributes.fetch(:session_id))
+      expect(regenerated_attributes.fetch(:summary_payload)).not_to eq(original_attributes.fetch(:summary_payload))
+      expect(regenerated_attributes.fetch(:conversation_preview)).to eq("updated")
+      expect(CopilotSession.where(session_id: "replaceable-session")).not_to exist
+      expect(regenerated_attributes.keys).not_to include(:skip, :upsert, :delete, :raw_files_primary_source)
+    end
+  end
+
+  def write_source(relative_path, content)
+    path = @tmpdir.join(relative_path)
+    path.dirname.mkpath
+    path.write(content)
+    path
+  end
+
+  def build_session(
+    session_id:,
+    source_format:,
+    source_state: :complete,
+    cwd: nil,
+    git_root: nil,
+    repository: nil,
+    branch: nil,
+    created_at: "2026-04-28T01:00:00Z",
+    updated_at: nil,
+    selected_model: nil,
+    events: [],
+    message_snapshots: [],
+    issues: [],
+    source_paths:
+  )
+    CopilotHistory::Types::NormalizedSession.new(
+      session_id:,
+      source_format:,
+      source_state:,
+      cwd:,
+      git_root:,
+      repository:,
+      branch:,
+      created_at:,
+      updated_at:,
+      selected_model:,
+      events:,
+      message_snapshots:,
+      issues:,
+      source_paths:
+    )
+  end
+
+  def build_event(sequence:, raw_type:, occurred_at:, role:, content:, kind: :message, raw_payload: {})
+    CopilotHistory::Types::NormalizedEvent.new(
+      sequence:,
+      kind:,
+      raw_type:,
+      occurred_at:,
+      role:,
+      content:,
+      raw_payload:
+    )
+  end
+end

@@ -45,8 +45,8 @@
   - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6_
   - _Boundary: SourceFingerprintBuilder_
 
-- [ ] 3. 正規化済みセッションから保存 attributes を作る
-- [ ] 3.1 既存 presenter の表示 payload を保存 snapshot として再利用する
+- [x] 3. 正規化済みセッションから保存 attributes を作る
+- [x] 3.1 既存 presenter の表示 payload を保存 snapshot として再利用する
   - 一覧表示用 payload と詳細表示用 payload を既存の表示 contract から生成する。
   - 詳細 payload は通常表示用の粒度を保存し、raw payload の opt-in 表示とは切り離す。
   - current 形式と legacy 形式のどちらでも共通の payload 保存 contract として扱う。
@@ -54,7 +54,7 @@
   - _Requirements: 2.1, 2.2, 2.3, 2.5, 6.1_
   - _Boundary: SessionRecordBuilder_
 
-- [ ] 3.2 セッション属性、source metadata、履歴日時を保存 attributes に写像する
+- [x] 3.2 セッション属性、source metadata、履歴日時を保存 attributes に写像する
   - source format、source state、作業コンテキスト、選択モデル、件数、劣化状態、issue 数を scalar attributes に写像する。
   - source paths は role keyed の保存可能な値に変換し、fingerprint は source metadata 生成契約に委譲する。
   - 履歴由来の作成日時・更新日時は入力値をそのまま反映し、欠落時に保存レコード日時で補完しない。
@@ -63,7 +63,7 @@
   - _Requirements: 1.3, 1.4, 1.5, 2.4, 3.1, 5.1, 5.2, 6.1, 6.3_
   - _Boundary: SessionRecordBuilder, SourceFingerprintBuilder_
 
-- [ ] 3.3 再生成可能な補助層としての境界を固定する
+- [x] 3.3 再生成可能な補助層としての境界を固定する
   - 同じセッション ID の再生成結果で保存済み payload を置き換えられる attributes を提供する。
   - current / legacy の違いを read model contract の中で吸収し、raw files を一次ソースから外す契約を追加しない。
   - fingerprint は比較材料の生成に留め、保存省略・再生成・upsert 判断を行わない。
