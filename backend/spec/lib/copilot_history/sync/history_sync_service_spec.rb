@@ -1,4 +1,5 @@
 require "rails_helper"
+require "tempfile"
 
 RSpec.describe CopilotHistory::Sync::HistorySyncService do
   subject(:service) do
@@ -146,6 +147,37 @@ RSpec.describe CopilotHistory::Sync::HistorySyncService do
     )
   end
 
+  it "does not modify raw source files or delete sessions missing from the latest read result" do
+    Tempfile.create([ "history-sync-service", ".jsonl" ]) do |raw_file|
+      raw_file.write("raw event payload\n")
+      raw_file.flush
+      raw_file_path = Pathname.new(raw_file.path)
+      raw_contents = File.binread(raw_file_path)
+      session = build_session(
+        session_id: "raw-preserved-session",
+        source_paths: { events: raw_file_path }
+      )
+      stale_session = create_session(
+        session_id: "stale-read-model-session",
+        source_fingerprint: fingerprint_for("stale"),
+        indexed_at: Time.zone.parse("2026-04-29 09:00:00")
+      )
+      fingerprint = fingerprint_for("raw-preserved")
+      allow(reader).to receive(:call).and_return(success_result(session))
+      allow(fingerprint_builder).to receive(:call).with(source_paths: session.source_paths).and_return(fingerprint)
+      allow(record_builder).to receive(:call)
+        .with(session:, indexed_at: now, source_fingerprint: fingerprint)
+        .and_return(attributes_for(session, fingerprint))
+
+      result = service.call
+
+      expect(result).to be_succeeded
+      expect(File).to exist(raw_file_path)
+      expect(File.binread(raw_file_path)).to eq(raw_contents)
+      expect(CopilotSession.exists?(id: stale_session.id)).to be(true)
+    end
+  end
+
   it "persists degraded sessions and completes with issues" do
     issue = CopilotHistory::Types::ReadIssue.new(
       code: CopilotHistory::Errors::ReadErrorCode::EVENT_PARTIAL_MAPPING,
@@ -175,6 +207,30 @@ RSpec.describe CopilotHistory::Sync::HistorySyncService do
       source_state: "degraded",
       degraded: true,
       issue_count: 1
+    )
+  end
+
+  it "counts sessions with degraded source state as degraded even when issue details are empty" do
+    session = build_session(session_id: "state-degraded-session", source_state: :degraded, issues: [])
+    fingerprint = fingerprint_for("state-degraded")
+    allow(reader).to receive(:call).and_return(success_result(session))
+    allow(fingerprint_builder).to receive(:call).with(source_paths: session.source_paths).and_return(fingerprint)
+    allow(record_builder).to receive(:call)
+      .with(session:, indexed_at: now, source_fingerprint: fingerprint)
+      .and_return(attributes_for(session, fingerprint, source_state: "degraded", degraded: true))
+
+    result = service.call
+
+    expect(result).to be_succeeded
+    expect(result.sync_run).to have_attributes(
+      status: "completed_with_issues",
+      processed_count: 1,
+      degraded_count: 1,
+      degradation_summary: "1 sessions degraded"
+    )
+    expect(CopilotSession.find_by!(session_id: "state-degraded-session")).to have_attributes(
+      source_state: "degraded",
+      degraded: true
     )
   end
 
@@ -212,7 +268,12 @@ RSpec.describe CopilotHistory::Sync::HistorySyncService do
     CopilotHistory::Types::ReadResult::Success.new(root: nil, sessions: sessions)
   end
 
-  def build_session(session_id:, source_state: :complete, issues: [])
+  def build_session(
+    session_id:,
+    source_state: :complete,
+    issues: [],
+    source_paths: { events: Pathname.new("/tmp/#{session_id}/events.jsonl") }
+  )
     CopilotHistory::Types::NormalizedSession.new(
       session_id:,
       source_format: :current,
@@ -222,7 +283,7 @@ RSpec.describe CopilotHistory::Sync::HistorySyncService do
       events: [],
       message_snapshots: [],
       issues:,
-      source_paths: { events: Pathname.new("/tmp/#{session_id}/events.jsonl") }
+      source_paths:
     )
   end
 

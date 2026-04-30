@@ -113,7 +113,7 @@
   - _Boundary: Request Specs, HistorySyncPresenter, HistorySyncRun_
 
 - [ ] 5. 実装全体の検証を完了する
-- [ ] 5.1 service spec で同期判定と transaction 境界を網羅する
+- [x] 5.1 service spec で同期判定と transaction 境界を網羅する
   - reader success/failure を制御した service spec で insert、update、skip、degraded、root failure、running conflict を個別に確認できる
   - 永続化失敗の spec で session mutation が rollback され、failed run と lock 解放が残ることを確認できる
   - raw files を一次ソースとして読み取るだけで、同期 service が raw files への write/delete を行わないことを確認できる
@@ -121,7 +121,7 @@
   - _Requirements: 1.1, 1.4, 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.2, 3.3, 3.4, 3.5, 4.1, 4.4, 4.5, 5.1, 5.2, 5.3, 5.4, 6.1, 6.2, 6.4_
   - _Boundary: Service Specs, HistorySyncService_
 
-- [ ] 5.2 backend spec suite で migration、model、builder、presenter、request の回帰を確認する
+- [x] 5.2 backend spec suite で migration、model、builder、presenter、request の回帰を確認する
   - schema/model specs で sync run の count と running lock の不変条件が確認できる
   - builder/presenter/request specs で fingerprint reuse、JSON contract、HTTP status mapping が確認できる
   - backend の対象 spec または既存 CI コマンドが成功し、この feature の runtime prerequisite が Docker Compose 標準に乗っていることを確認できる

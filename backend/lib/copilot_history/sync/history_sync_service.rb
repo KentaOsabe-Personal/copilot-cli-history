@@ -97,7 +97,7 @@ module CopilotHistory
           updated_count: 0,
           saved_count: 0,
           skipped_count: 0,
-          degraded_count: sessions.count { |session| session.issues.any? }
+          degraded_count: sessions.count { |session| degraded_session?(session) }
         }
 
         sessions.each do |session|
@@ -145,6 +145,10 @@ module CopilotHistory
         return nil if degraded_count.zero?
 
         "#{degraded_count} sessions degraded"
+      end
+
+      def degraded_session?(session)
+        session.source_state.to_s == "degraded" || session.issues.any?
       end
 
       def current_time
