@@ -59,6 +59,22 @@ RSpec.describe CopilotHistory::Persistence::SourceFingerprintBuilder do
     )
   end
 
+  it "marks artifacts deleted between existence and stat checks as missing" do
+    deleted_path = @tmpdir.join("deleted-during-stat.json")
+    deleted_path.write("{}")
+    allow_any_instance_of(Pathname).to receive(:stat).and_raise(Errno::ENOENT)
+
+    fingerprint = described_class.new.call(source_paths: { source: deleted_path })
+
+    expect(fingerprint).to include("complete" => false)
+    expect(fingerprint.dig("artifacts", "source")).to include(
+      "path" => deleted_path.to_s,
+      "mtime" => nil,
+      "size" => nil,
+      "status" => "missing"
+    )
+  end
+
   it "marks unreadable artifacts as incomplete without raising" do
     unreadable_path = @tmpdir.join("unreadable.json")
     unreadable_path.write("{}")

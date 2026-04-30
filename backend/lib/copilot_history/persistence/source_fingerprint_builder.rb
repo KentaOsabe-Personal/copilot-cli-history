@@ -30,6 +30,8 @@ module CopilotHistory
           "size" => stat.size,
           "status" => OK
         }
+      rescue Errno::ENOENT
+        unavailable_artifact(pathname, MISSING)
       rescue SystemCallError
         unavailable_artifact(pathname, UNREADABLE)
       end
