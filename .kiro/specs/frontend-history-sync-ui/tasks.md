@@ -1,7 +1,7 @@
 # 実装計画
 
 - [ ] 1. 履歴同期 API contract を frontend client に追加する
-- [ ] 1.1 同期 API の success と failure を既存の typed result と同じ形で扱えるようにする
+- [x] 1.1 同期 API の success と failure を既存の typed result と同じ形で扱えるようにする
   - 履歴同期の成功 payload と件数情報を frontend の型安全な結果として受け取れるようにする
   - 同期 request は body なしの明示的な POST として送信され、既存の一覧・詳細取得は GET のまま動く
   - 409 conflict、backend failure、network failure、API base URL 設定不備が、status と error code を失わずに呼び出し側へ返る
@@ -9,7 +9,7 @@
   - _Requirements: 1.2, 2.1, 4.1, 4.2, 4.3, 4.5_
   - _Boundary: SessionApiClient_
 
-- [ ] 1.2 同期 API client の契約をテストで固定する
+- [x] 1.2 同期 API client の契約をテストで固定する
   - success payload が同期 run と counts を保持したまま返ることを確認する
   - conflict、root failure、backend failure、network failure、config failure の分類を確認する
   - 一覧・詳細 API の既存 request と error normalization が変わっていないことを確認する

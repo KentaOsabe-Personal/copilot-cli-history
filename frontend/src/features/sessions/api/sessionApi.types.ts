@@ -151,6 +151,30 @@ export interface SessionDetailResponse {
   data: SessionDetail
 }
 
+export interface HistorySyncRun {
+  id: number
+  status: string
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface HistorySyncCounts {
+  processed_count: number
+  inserted_count: number
+  updated_count: number
+  saved_count: number
+  skipped_count: number
+  failed_count: number
+  degraded_count: number
+}
+
+export interface HistorySyncResponse {
+  data: {
+    sync_run: HistorySyncRun
+    counts: HistorySyncCounts
+  }
+}
+
 export interface ErrorEnvelope {
   error: {
     code: string
@@ -210,4 +234,5 @@ export interface SessionApiClient {
     sessionId: string,
     signal?: AbortSignal,
   ): Promise<SessionApiResult<SessionDetailResponse>>
+  syncHistory(signal?: AbortSignal): Promise<SessionApiResult<HistorySyncResponse>>
 }

@@ -32,6 +32,9 @@ function createClient(fetchSessionIndex: SessionApiClient['fetchSessionIndex']):
     >(async (): Promise<SessionApiResult<SessionDetailResponse>> => {
       throw new Error('fetchSessionDetailWithRaw should not be called in useSessionIndex tests')
     }),
+    syncHistory: vi.fn<SessionApiClient['syncHistory']>(async () => {
+      throw new Error('syncHistory should not be called in useSessionIndex tests')
+    }),
   }
 }
 

@@ -12,6 +12,28 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
   })
 }
 
+function buildHistorySyncResponse() {
+  return {
+    data: {
+      sync_run: {
+        id: 42,
+        status: 'completed_with_issues',
+        started_at: '2026-04-30T09:00:00Z',
+        finished_at: '2026-04-30T09:00:05Z',
+      },
+      counts: {
+        processed_count: 5,
+        inserted_count: 2,
+        updated_count: 1,
+        saved_count: 3,
+        skipped_count: 2,
+        failed_count: 0,
+        degraded_count: 1,
+      },
+    },
+  }
+}
+
 describe('createSessionApiClient', () => {
   it('returns success for the session index response without changing backend order', async () => {
     const payload = {
@@ -90,6 +112,12 @@ describe('createSessionApiClient', () => {
       data: payload,
     })
     expect(String(fetchMock.mock.calls[0][0])).toBe('http://localhost:30000/api/sessions')
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    })
   })
 
   it('fetches normal and raw-explicit detail through separate typed client methods', async () => {
@@ -148,9 +176,188 @@ describe('createSessionApiClient', () => {
     expect(String(fetchMock.mock.calls[0][0])).toBe(
       'http://localhost:30000/api/sessions/session-raw',
     )
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    })
     expect(String(fetchMock.mock.calls[1][0])).toBe(
       'http://localhost:30000/api/sessions/session-raw?include_raw=true',
     )
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    })
+  })
+
+  it('posts sync history without a body and returns the sync payload unchanged', async () => {
+    const payload = buildHistorySyncResponse()
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(payload))
+    const client = createSessionApiClient({
+      fetchImpl: fetchMock,
+      env: { VITE_API_BASE_URL: 'http://localhost:30000' },
+    })
+
+    await expect(client.syncHistory()).resolves.toEqual({
+      status: 'success',
+      data: payload,
+    })
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe('http://localhost:30000/api/history/sync')
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+      },
+    })
+    expect(fetchMock.mock.calls[0][1]?.body).toBeUndefined()
+  })
+
+  it('preserves sync conflicts as backend errors with http status and code', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: 'history_sync_running',
+            message: 'history sync is already running',
+            details: {
+              sync_run_id: 7,
+              started_at: '2026-04-30T08:55:00Z',
+            },
+          },
+        },
+        { status: 409 },
+      ),
+    )
+    const client = createSessionApiClient({
+      fetchImpl: fetchMock,
+      env: { VITE_API_BASE_URL: 'http://localhost:30000' },
+    })
+
+    await expect(client.syncHistory()).resolves.toEqual({
+      status: 'error',
+      error: {
+        kind: 'backend',
+        httpStatus: 409,
+        code: 'history_sync_running',
+        message: 'history sync is already running',
+        details: {
+          sync_run_id: 7,
+          started_at: '2026-04-30T08:55:00Z',
+        },
+      },
+    })
+  })
+
+  it('preserves root and persistence sync failures as backend errors', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error: {
+              code: 'root_missing',
+              message: 'history root does not exist',
+              details: {
+                path: '/tmp/.copilot',
+              },
+            },
+            meta: buildHistorySyncResponse().data,
+          },
+          { status: 503 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error: {
+              code: 'history_sync_failed',
+              message: 'history sync failed',
+              details: {
+                failure_class: 'ActiveRecord::RecordInvalid',
+                sync_run_id: 8,
+              },
+            },
+            meta: buildHistorySyncResponse().data,
+          },
+          { status: 500 },
+        ),
+      )
+    const client = createSessionApiClient({
+      fetchImpl: fetchMock,
+      env: { VITE_API_BASE_URL: 'http://localhost:30000' },
+    })
+
+    await expect(client.syncHistory()).resolves.toEqual({
+      status: 'error',
+      error: {
+        kind: 'backend',
+        httpStatus: 503,
+        code: 'root_missing',
+        message: 'history root does not exist',
+        details: {
+          path: '/tmp/.copilot',
+        },
+      },
+    })
+
+    await expect(client.syncHistory()).resolves.toEqual({
+      status: 'error',
+      error: {
+        kind: 'backend',
+        httpStatus: 500,
+        code: 'history_sync_failed',
+        message: 'history sync failed',
+        details: {
+          failure_class: 'ActiveRecord::RecordInvalid',
+          sync_run_id: 8,
+        },
+      },
+    })
+  })
+
+  it('returns a config error before requesting when sync history is called without an API base URL', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+    const client = createSessionApiClient({
+      fetchImpl: fetchMock,
+      env: {},
+    })
+
+    await expect(client.syncHistory()).resolves.toEqual({
+      status: 'error',
+      error: {
+        kind: 'config',
+        code: 'api_base_url_missing',
+        message: 'VITE_API_BASE_URL is not configured',
+        details: {
+          env: 'VITE_API_BASE_URL',
+        },
+      },
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('normalizes sync network failures into a network error', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('Failed to fetch'))
+    const client = createSessionApiClient({
+      fetchImpl: fetchMock,
+      env: { VITE_API_BASE_URL: 'http://localhost:30000' },
+    })
+
+    await expect(client.syncHistory()).resolves.toEqual({
+      status: 'error',
+      error: {
+        kind: 'network',
+        code: 'network_error',
+        message: 'Network request failed',
+        details: {
+          cause: 'Failed to fetch',
+        },
+      },
+    })
   })
 
   it('normalizes a detail 404 session_not_found into a not_found error', async () => {

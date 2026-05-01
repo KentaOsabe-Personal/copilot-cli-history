@@ -1,6 +1,7 @@
 import { resolveApiBaseUrl } from './apiBaseUrl.ts'
 import type {
   ErrorEnvelope,
+  HistorySyncResponse,
   SessionApiClient,
   SessionApiEnvironment,
   SessionApiError,
@@ -46,6 +47,14 @@ export function createSessionApiClient(
         signal,
       })
     },
+    syncHistory(signal) {
+      return requestJson<HistorySyncResponse>('/api/history/sync', {
+        fetchImpl,
+        env,
+        signal,
+        method: 'POST',
+      })
+    },
   }
 }
 
@@ -57,6 +66,7 @@ async function requestJson<T>(
     fetchImpl: FetchImpl
     env?: SessionApiEnvironment
     signal?: AbortSignal
+    method?: 'GET' | 'POST'
   },
 ): Promise<SessionApiResult<T>> {
   const baseUrlResult = resolveApiBaseUrl(options.env)
@@ -70,6 +80,7 @@ async function requestJson<T>(
 
   try {
     const response = await options.fetchImpl(new URL(path, baseUrlResult.baseUrl), {
+      method: options.method ?? 'GET',
       headers: {
         Accept: 'application/json',
       },
