@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { SessionSummary } from '../api/sessionApi.types.ts'
+import type { SessionIndexState, UseSessionIndexResult } from '../hooks/useSessionIndex.ts'
 import { useSessionIndex } from '../hooks/useSessionIndex.ts'
 import SessionIndexPage from './SessionIndexPage.tsx'
 
@@ -12,6 +13,19 @@ vi.mock('../hooks/useSessionIndex.ts', () => ({
 }))
 
 const mockedUseSessionIndex = vi.mocked(useSessionIndex)
+
+function buildUseSessionIndexResult(state: SessionIndexState): UseSessionIndexResult {
+  const reloadOutcome =
+    state.status === 'loading'
+      ? ({ status: 'empty' } as const)
+      : state
+
+  return {
+    state,
+    isRefreshing: false,
+    reloadSessions: async () => reloadOutcome,
+  }
+}
 
 function buildSessionSummary(overrides: Partial<SessionSummary> = {}): SessionSummary {
   return {
@@ -47,9 +61,7 @@ describe('SessionIndexPage', () => {
   })
 
   it('renders a loading panel while the session index is being fetched', () => {
-    mockedUseSessionIndex.mockReturnValue({
-      state: { status: 'loading' },
-    })
+    mockedUseSessionIndex.mockReturnValue(buildUseSessionIndexResult({ status: 'loading' }))
 
     render(
       <MemoryRouter>
@@ -62,9 +74,7 @@ describe('SessionIndexPage', () => {
   })
 
   it('renders an empty panel when the backend returns no sessions', () => {
-    mockedUseSessionIndex.mockReturnValue({
-      state: { status: 'empty' },
-    })
+    mockedUseSessionIndex.mockReturnValue(buildUseSessionIndexResult({ status: 'empty' }))
 
     render(
       <MemoryRouter>
@@ -76,33 +86,31 @@ describe('SessionIndexPage', () => {
   })
 
   it('renders ordered session cards without placeholder-only work context or model metadata', () => {
-    mockedUseSessionIndex.mockReturnValue({
-      state: {
-        status: 'success',
-        sessions: [
-          buildSessionSummary({
-            id: 'session-b',
-            updated_at: '2026-04-26T10:05:00Z',
-            degraded: true,
-          }),
-          buildSessionSummary({
-            id: 'session-a',
-            updated_at: null,
-            work_context: {
-              cwd: null,
-              git_root: null,
-              repository: null,
-              branch: null,
-            },
-            selected_model: null,
-          }),
-        ],
-        meta: {
-          count: 2,
-          partial_results: true,
-        },
+    mockedUseSessionIndex.mockReturnValue(buildUseSessionIndexResult({
+      status: 'success',
+      sessions: [
+        buildSessionSummary({
+          id: 'session-b',
+          updated_at: '2026-04-26T10:05:00Z',
+          degraded: true,
+        }),
+        buildSessionSummary({
+          id: 'session-a',
+          updated_at: null,
+          work_context: {
+            cwd: null,
+            git_root: null,
+            repository: null,
+            branch: null,
+          },
+          selected_model: null,
+        }),
+      ],
+      meta: {
+        count: 2,
+        partial_results: true,
       },
-    })
+    }))
 
     render(
       <MemoryRouter>
@@ -125,46 +133,44 @@ describe('SessionIndexPage', () => {
   })
 
   it('keeps normal sessions free of always-on status badges while surfacing exceptional states', () => {
-    mockedUseSessionIndex.mockReturnValue({
-      state: {
-        status: 'success',
-        sessions: [
-          buildSessionSummary({
-            id: 'conversation-session',
-            updated_at: '2026-04-26T10:05:00Z',
-            conversation_summary: {
-              has_conversation: true,
-              message_count: 4,
-              preview: '次の実装方針を相談したい',
-              activity_count: 7,
-            },
-          }),
-          buildSessionSummary({
-            id: 'metadata-only-session',
-            conversation_summary: {
-              has_conversation: false,
-              message_count: 0,
-              preview: null,
-              activity_count: 0,
-            },
-          }),
-          buildSessionSummary({
-            id: 'workspace-only-session',
-            source_state: 'workspace_only',
-            conversation_summary: {
-              has_conversation: false,
-              message_count: 0,
-              preview: null,
-              activity_count: 0,
-            },
-          }),
-        ],
-        meta: {
-          count: 3,
-          partial_results: false,
-        },
+    mockedUseSessionIndex.mockReturnValue(buildUseSessionIndexResult({
+      status: 'success',
+      sessions: [
+        buildSessionSummary({
+          id: 'conversation-session',
+          updated_at: '2026-04-26T10:05:00Z',
+          conversation_summary: {
+            has_conversation: true,
+            message_count: 4,
+            preview: '次の実装方針を相談したい',
+            activity_count: 7,
+          },
+        }),
+        buildSessionSummary({
+          id: 'metadata-only-session',
+          conversation_summary: {
+            has_conversation: false,
+            message_count: 0,
+            preview: null,
+            activity_count: 0,
+          },
+        }),
+        buildSessionSummary({
+          id: 'workspace-only-session',
+          source_state: 'workspace_only',
+          conversation_summary: {
+            has_conversation: false,
+            message_count: 0,
+            preview: null,
+            activity_count: 0,
+          },
+        }),
+      ],
+      meta: {
+        count: 3,
+        partial_results: false,
       },
-    })
+    }))
 
     render(
       <MemoryRouter>
@@ -185,20 +191,18 @@ describe('SessionIndexPage', () => {
   })
 
   it('renders an error panel without success cards when the fetch fails', () => {
-    mockedUseSessionIndex.mockReturnValue({
-      state: {
-        status: 'error',
-        error: {
-          kind: 'backend',
-          httpStatus: 503,
-          code: 'root_missing',
-          message: 'history root does not exist',
-          details: {
-            path: '/tmp/.copilot',
-          },
+    mockedUseSessionIndex.mockReturnValue(buildUseSessionIndexResult({
+      status: 'error',
+      error: {
+        kind: 'backend',
+        httpStatus: 503,
+        code: 'root_missing',
+        message: 'history root does not exist',
+        details: {
+          path: '/tmp/.copilot',
         },
       },
-    })
+    }))
 
     render(
       <MemoryRouter>
@@ -213,20 +217,18 @@ describe('SessionIndexPage', () => {
   it('navigates to the detail route when a session card is selected', async () => {
     const user = userEvent.setup()
 
-    mockedUseSessionIndex.mockReturnValue({
-      state: {
-        status: 'success',
-        sessions: [
-          buildSessionSummary({
-            id: 'session-123',
-          }),
-        ],
-        meta: {
-          count: 1,
-          partial_results: false,
-        },
+    mockedUseSessionIndex.mockReturnValue(buildUseSessionIndexResult({
+      status: 'success',
+      sessions: [
+        buildSessionSummary({
+          id: 'session-123',
+        }),
+      ],
+      meta: {
+        count: 1,
+        partial_results: false,
       },
-    })
+    }))
 
     render(
       <MemoryRouter initialEntries={['/']}>

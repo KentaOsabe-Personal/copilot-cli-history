@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { sessionApiClient } from '../api/sessionApi.ts'
 import type {
   SessionApiClient,
   SessionApiError,
+  SessionApiResult,
   SessionIndexMeta,
+  SessionIndexResponse,
   SessionSummary,
 } from '../api/sessionApi.types.ts'
 
@@ -27,10 +29,22 @@ export interface UseSessionIndexOptions {
 
 export interface UseSessionIndexResult {
   state: SessionIndexState
+  isRefreshing: boolean
+  reloadSessions(): Promise<SessionIndexSettledState>
 }
 
-type SettledSessionIndexState = Exclude<SessionIndexState, { status: 'loading' }>
+export type SessionIndexSettledState = Exclude<SessionIndexState, { status: 'loading' }>
+
+type SettledSessionIndexState = SessionIndexSettledState
 type ReusableSessionIndexState = Extract<SessionIndexState, { status: 'success' | 'empty' }>
+type SettledStateEnvelope = {
+  client: SessionApiClient
+  state: SettledSessionIndexState
+}
+type ActiveRequest = {
+  id: number
+  controller: AbortController
+}
 
 let lastReusableSnapshot: {
   client: SessionApiClient
@@ -41,68 +55,153 @@ export function useSessionIndex(
   options: UseSessionIndexOptions = {},
 ): UseSessionIndexResult {
   const client = options.client ?? sessionApiClient
-  const [settledState, setSettledState] = useState<{
-    client: SessionApiClient
-    state: SettledSessionIndexState
-  } | null>(() => lastReusableSnapshot)
+  const [settledState, setSettledState] = useState<SettledStateEnvelope | null>(() => lastReusableSnapshot)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const settledStateRef = useRef<SettledStateEnvelope | null>(lastReusableSnapshot)
+  const activeRequestRef = useRef<ActiveRequest | null>(null)
+  const requestIdRef = useRef(0)
 
   useEffect(() => {
-    const controller = new AbortController()
-    let isActive = true
+    settledStateRef.current = settledState
+  }, [settledState])
 
-    void client.fetchSessionIndex(controller.signal).then((result) => {
-      if (!isActive || controller.signal.aborted) {
-        return
-      }
-
-      if (result.status === 'error') {
-        setSettledState({
-          client,
-          state: {
-            status: 'error',
-            error: result.error,
-          },
-        })
-        return
-      }
-
-      if (result.data.data.length === 0) {
+  const applySettledState = useCallback(
+    (nextState: SettledSessionIndexState) => {
+      if (isReusableSessionIndexState(nextState)) {
         lastReusableSnapshot = {
           client,
-          state: { status: 'empty' },
+          state: nextState,
         }
-        setSettledState({
-          client,
-          state: lastReusableSnapshot.state,
-        })
+      }
+
+      setSettledState({
+        client,
+        state: nextState,
+      })
+    },
+    [client],
+  )
+
+  const reloadSessions = useCallback(async (): Promise<SessionIndexSettledState> => {
+    requestIdRef.current += 1
+    const requestId = requestIdRef.current
+    const controller = new AbortController()
+    const previousRequest = activeRequestRef.current
+    const previousState = currentSettledStateForClient(settledStateRef.current, client)
+
+    activeRequestRef.current = { id: requestId, controller }
+    previousRequest?.controller.abort()
+    setIsRefreshing(true)
+
+    const result = await client.fetchSessionIndex(controller.signal)
+
+    if (controller.signal.aborted || activeRequestRef.current?.id !== requestId) {
+      if (activeRequestRef.current?.id === requestId) {
+        activeRequestRef.current = null
+        setIsRefreshing(false)
+      }
+
+      return previousState ?? toSettledState(result)
+    }
+
+    activeRequestRef.current = null
+    setIsRefreshing(false)
+
+    const nextState = toSettledState(result)
+
+    if (
+      nextState.status === 'error' &&
+      previousState != null &&
+      isReusableSessionIndexState(previousState)
+    ) {
+      return nextState
+    }
+
+    applySettledState(nextState)
+
+    return nextState
+  }, [applySettledState, client])
+
+  useEffect(() => {
+    requestIdRef.current += 1
+    const requestId = requestIdRef.current
+    const controller = new AbortController()
+    const previousRequest = activeRequestRef.current
+
+    activeRequestRef.current = { id: requestId, controller }
+    previousRequest?.controller.abort()
+
+    void client.fetchSessionIndex(controller.signal).then((result) => {
+      if (controller.signal.aborted || activeRequestRef.current?.id !== requestId) {
+        if (activeRequestRef.current?.id === requestId) {
+          activeRequestRef.current = null
+          setIsRefreshing(false)
+        }
+
         return
       }
 
-      lastReusableSnapshot = {
-        client,
-        state: {
-          status: 'success',
-          sessions: result.data.data,
-          meta: result.data.meta,
-        },
-      }
-      setSettledState({
-        client,
-        state: lastReusableSnapshot.state,
-      })
+      activeRequestRef.current = null
+      setIsRefreshing(false)
+      applySettledState(toSettledState(result))
     })
 
     return () => {
-      isActive = false
       controller.abort()
+      activeRequestRef.current?.controller.abort()
+      activeRequestRef.current = null
     }
-  }, [client])
+  }, [applySettledState, client])
 
   if (settledState == null || settledState.client !== client) {
     return {
       state: { status: 'loading' },
+      isRefreshing: false,
+      reloadSessions,
     }
   }
 
-  return { state: settledState.state }
+  return {
+    state: settledState.state,
+    isRefreshing,
+    reloadSessions,
+  }
+}
+
+function currentSettledStateForClient(
+  settledState: SettledStateEnvelope | null,
+  client: SessionApiClient,
+): SettledSessionIndexState | null {
+  if (settledState == null || settledState.client !== client) {
+    return null
+  }
+
+  return settledState.state
+}
+
+function isReusableSessionIndexState(
+  state: SettledSessionIndexState,
+): state is ReusableSessionIndexState {
+  return state.status === 'success' || state.status === 'empty'
+}
+
+function toSettledState(
+  result: SessionApiResult<SessionIndexResponse>,
+): SettledSessionIndexState {
+  if (result.status === 'error') {
+    return {
+      status: 'error',
+      error: result.error,
+    }
+  }
+
+  if (result.data.data.length === 0) {
+    return { status: 'empty' }
+  }
+
+  return {
+    status: 'success',
+    sessions: result.data.data,
+    meta: result.data.meta,
+  }
 }

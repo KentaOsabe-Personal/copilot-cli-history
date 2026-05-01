@@ -1,6 +1,6 @@
 # 実装計画
 
-- [ ] 1. 履歴同期 API contract を frontend client に追加する
+- [x] 1. 履歴同期 API contract を frontend client に追加する
 - [x] 1.1 同期 API の success と failure を既存の typed result と同じ形で扱えるようにする
   - 履歴同期の成功 payload と件数情報を frontend の型安全な結果として受け取れるようにする
   - 同期 request は body なしの明示的な POST として送信され、既存の一覧・詳細取得は GET のまま動く
@@ -17,8 +17,8 @@
   - _Requirements: 1.2, 4.1, 4.2, 4.3, 5.1_
   - _Boundary: SessionApiClient_
 
-- [ ] 2. セッション一覧の明示 reload contract を追加する
-- [ ] 2.1 一覧取得 state から同期後に再取得できる settled outcome を返す
+- [x] 2. セッション一覧の明示 reload contract を追加する
+- [x] 2.1 一覧取得 state から同期後に再取得できる settled outcome を返す
   - 初回表示の loading、empty、success、error の既存状態を保ったまま、利用者操作後に一覧を再取得できるようにする
   - reload 中は既に表示できている一覧または空状態を不必要に消さず、refreshing 状態だけを追加で識別できる
   - reload の結果は success、empty、error のいずれかとして呼び出し側へ返り、backend が返した session order は維持される
@@ -26,7 +26,7 @@
   - _Requirements: 2.1, 2.2, 2.4, 3.1, 5.2_
   - _Boundary: useSessionIndex_
 
-- [ ] 2.2 reload 中の snapshot 維持と settled outcome をテストで固定する
+- [x] 2.2 reload 中の snapshot 維持と settled outcome をテストで固定する
   - reload success で新しい session list と meta が返ることを確認する
   - reload empty が loading や error と区別されることを確認する
   - reload error が既存一覧を最新化済みとして扱わず、呼び出し側へ error outcome を返すことを確認する
