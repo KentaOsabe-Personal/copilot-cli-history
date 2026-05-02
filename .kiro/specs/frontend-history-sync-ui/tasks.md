@@ -35,8 +35,8 @@
   - _Requirements: 2.1, 2.2, 2.4, 3.1, 5.2_
   - _Boundary: useSessionIndex_
 
-- [ ] 3. 履歴同期の page-local state machine を実装する
-- [ ] 3.1 明示操作から同期を開始し、成功後 reload と失敗分類を管理する
+- [x] 3. 履歴同期の page-local state machine を実装する
+- [x] 3.1 明示操作から同期を開始し、成功後 reload と失敗分類を管理する
   - start が呼ばれるまで同期 request を開始せず、自動同期を行わない
   - syncing 中の再実行は新しい request を出さず、UI が disabled にできる状態を返す
   - 同期成功後は一覧 reload を一度だけ実行し、sessions あり、empty、refresh error を別状態へ分類する
@@ -46,7 +46,7 @@
   - _Requirements: 1.2, 1.3, 1.4, 1.5, 2.1, 2.3, 2.4, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 4.4, 4.5_
   - _Boundary: useHistorySync_
 
-- [ ] 3.2 同期 state machine の主要遷移をテストで固定する
+- [x] 3.2 同期 state machine の主要遷移をテストで固定する
   - 初期状態では同期 request が発行されないことを確認する
   - 同期中の二重実行抑止と、失敗後の再試行で新しい request が発行されることを確認する
   - success 後の reload success、reload empty、reload error が別状態になることを確認する
