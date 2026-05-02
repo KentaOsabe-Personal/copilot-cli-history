@@ -31,10 +31,11 @@
 
 - **Why this split**: DB read model は schema と保存 contract、sync API は raw reader 実行と upsert、session API DB query は既存表示 API の参照元切替、frontend sync UI は利用者操作に責務を分けられる。依存順に実装すれば、各段階で既存閲覧機能を保持したまま検証できる。
 - **Shared seams to watch**: `summary_payload` / `detail_payload` の shape、`source_fingerprint` の比較規則、root failure と session degraded の扱い、DB 空状態と sync error の UI 表示、日付比較に使う `COALESCE(updated_at_source, created_at_source)`。
+- **Cutover guardrail**: `session-api-db-query` は frontend の同期導線が完成してから実装・有効化する。先に API を DB only に切り替えると、DB 未投入環境で一覧が空になり、利用者が一時的に履歴を参照できなくなるため。
 
 ## Specs (dependency order)
 
 - [ ] history-db-read-model -- Copilot セッション履歴を DB read model として保存する schema / model / payload builder を定義する。Dependencies: none
 - [ ] history-sync-api -- raw files を読み取り、DB read model へ同期する service と明示同期 API を追加する。Dependencies: history-db-read-model
-- [ ] session-api-db-query -- 既存 session list/detail API を DB query に切り替え、日付範囲指定を DB 側で処理する。Dependencies: history-db-read-model, history-sync-api
 - [ ] frontend-history-sync-ui -- frontend に履歴最新化ボタン、DB 空状態、同期中・成功・失敗表示を追加する。Dependencies: history-sync-api
+- [ ] session-api-db-query -- 既存 session list/detail API を DB query に切り替え、日付範囲指定を DB 側で処理する。Dependencies: history-db-read-model, history-sync-api, frontend-history-sync-ui

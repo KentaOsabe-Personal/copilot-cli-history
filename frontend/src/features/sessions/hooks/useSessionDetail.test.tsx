@@ -36,6 +36,9 @@ function createClient(
     }),
     fetchSessionDetail,
     fetchSessionDetailWithRaw,
+    syncHistory: vi.fn<SessionApiClient['syncHistory']>(async () => {
+      throw new Error('syncHistory should not be called in useSessionDetail tests')
+    }),
   }
 }
 

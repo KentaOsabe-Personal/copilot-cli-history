@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 
 type StatusPanelVariant = 'loading' | 'empty' | 'not_found' | 'error'
@@ -6,6 +7,7 @@ interface StatusPanelProps {
   variant: StatusPanelVariant
   title: string
   message: string
+  action?: ReactNode
   showSessionIndexLink?: boolean
   sessionIndexHref?: string
 }
@@ -21,6 +23,7 @@ function StatusPanel({
   variant,
   title,
   message,
+  action,
   showSessionIndexLink = false,
   sessionIndexHref = '/',
 }: StatusPanelProps) {
@@ -36,14 +39,17 @@ function StatusPanel({
 
         <p className="max-w-3xl text-sm leading-6 text-current/85">{message}</p>
 
-        {showSessionIndexLink ? (
-          <div>
-            <Link
-              to={sessionIndexHref}
-              className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:border-white/40 hover:bg-white/15"
-            >
-              セッション一覧へ戻る
-            </Link>
+        {action != null || showSessionIndexLink ? (
+          <div className="flex flex-wrap items-center gap-3">
+            {action != null ? <div>{action}</div> : null}
+            {showSessionIndexLink ? (
+              <Link
+                to={sessionIndexHref}
+                className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:border-white/40 hover:bg-white/15"
+              >
+                セッション一覧へ戻る
+              </Link>
+            ) : null}
           </div>
         ) : null}
       </div>

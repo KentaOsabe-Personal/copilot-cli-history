@@ -1,13 +1,23 @@
+import HistorySyncControl from '../components/HistorySyncControl.tsx'
+import HistorySyncStatus from '../components/HistorySyncStatus.tsx'
 import SessionList from '../components/SessionList.tsx'
+import SessionEmptyState from '../components/SessionEmptyState.tsx'
 import StatusPanel from '../components/StatusPanel.tsx'
+import { useHistorySync } from '../hooks/useHistorySync.ts'
 import { useSessionIndex } from '../hooks/useSessionIndex.ts'
 
 function SessionIndexPage() {
-  const { state } = useSessionIndex()
+  const { state, reloadSessions } = useSessionIndex()
+  const { state: syncState, isSyncing, startSync } = useHistorySync({ reloadSessions })
 
   return (
     <section className="flex flex-col gap-6">
-      <h2 className="text-2xl font-semibold text-white">セッション一覧</h2>
+      <div className="flex flex-col gap-4">
+        <h2 className="text-2xl font-semibold text-white">セッション一覧</h2>
+        <HistorySyncControl isSyncing={isSyncing} onSync={startSync} />
+      </div>
+
+      <HistorySyncStatus state={syncState} />
 
       {state.status === 'loading' ? (
         <StatusPanel
@@ -18,11 +28,7 @@ function SessionIndexPage() {
       ) : null}
 
       {state.status === 'empty' ? (
-        <StatusPanel
-          variant="empty"
-          title="セッションがありません"
-          message="表示できるセッションはありません。"
-        />
+        <SessionEmptyState syncState={syncState} isSyncing={isSyncing} onSync={startSync} />
       ) : null}
 
       {state.status === 'error' ? (
