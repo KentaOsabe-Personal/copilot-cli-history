@@ -32,7 +32,7 @@ function HistorySyncStatus({ state }: HistorySyncStatusProps) {
   return (
     <section
       role={content.role}
-      aria-live="polite"
+      aria-live={content.role === 'alert' ? 'assertive' : 'polite'}
       className={`rounded-3xl border p-6 shadow-2xl ${TONE_STYLES[content.tone]}`}
     >
       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-current/70">

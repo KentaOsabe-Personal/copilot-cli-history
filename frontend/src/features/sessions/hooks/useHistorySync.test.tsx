@@ -1,5 +1,5 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
-import { createRef, forwardRef, useImperativeHandle, type RefObject } from 'react'
+import { createRef, forwardRef, StrictMode, useImperativeHandle, type RefObject } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type {
@@ -75,9 +75,13 @@ function readIsSyncing() {
 function renderStateProbe(
   client: SessionApiClient,
   reloadSessions: () => Promise<SessionIndexSettledState>,
+  options: {
+    strictMode?: boolean
+  } = {},
 ) {
   const ref = createRef<ReturnType<typeof useHistorySync>>()
-  const view = render(<StateProbe client={client} reloadSessions={reloadSessions} ref={ref} />)
+  const probe = <StateProbe client={client} reloadSessions={reloadSessions} ref={ref} />
+  const view = render(options.strictMode ? <StrictMode>{probe}</StrictMode> : probe)
 
   return { ref, ...view }
 }
@@ -293,6 +297,33 @@ describe('useHistorySync', () => {
     expect(syncHistory.mock.invocationCallOrder[0]).toBeLessThan(
       reloadSessions.mock.invocationCallOrder[0],
     )
+  })
+
+  it('restores mounted state after StrictMode effect replays so sync state still updates', async () => {
+    const syncPayload = buildSyncPayload()
+    const syncHistory = vi.fn<SessionApiClient['syncHistory']>(async () => ({
+      status: 'success',
+      data: syncPayload,
+    }))
+    const reloadSessions = vi.fn<() => Promise<SessionIndexSettledState>>(
+      async () => buildReloadSuccessState(),
+    )
+    const client = createClient(syncHistory)
+    const { ref } = renderStateProbe(client, reloadSessions, { strictMode: true })
+
+    await act(async () => {
+      await startSync(ref)
+    })
+
+    await waitFor(() =>
+      expect(readState()).toEqual({
+        status: 'synced_with_sessions',
+        result: syncPayload.data,
+      }),
+    )
+    expect(readIsSyncing()).toBe(false)
+    expect(syncHistory).toHaveBeenCalledTimes(1)
+    expect(reloadSessions).toHaveBeenCalledTimes(1)
   })
 
   it('transitions to refresh_error when sync succeeds but reload fails', async () => {

@@ -45,6 +45,7 @@ describe('HistorySyncStatus', () => {
 
     render(<HistorySyncStatus state={state} />)
 
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
     expect(screen.getByRole('heading', { name: '履歴を最新化しました' })).toBeInTheDocument()
     expect(screen.getByText('3 件を保存しました。1 件は一部欠損を含みます。')).toBeInTheDocument()
   })
@@ -70,6 +71,7 @@ describe('HistorySyncStatus', () => {
 
     render(<HistorySyncStatus state={state} />)
 
+    expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive')
     expect(
       screen.getByRole('heading', { name: '履歴の同期は完了しましたが、最新の一覧を表示できません' }),
     ).toBeInTheDocument()
@@ -88,6 +90,7 @@ describe('HistorySyncStatus', () => {
 
     render(<HistorySyncStatus state={state} />)
 
+    expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive')
     expect(screen.getByRole('heading', { name: '履歴同期はすでに進行中の可能性があります' })).toBeInTheDocument()
     expect(screen.getByText('少し時間をおいてから、もう一度お試しください。')).toBeInTheDocument()
   })
@@ -126,6 +129,7 @@ describe('HistorySyncStatus', () => {
 
     render(<HistorySyncStatus state={state} />)
 
+    expect(screen.getByRole('alert')).toHaveAttribute('aria-live', 'assertive')
     expect(screen.getByRole('heading', { name: '履歴を同期できませんでした' })).toBeInTheDocument()
     expect(screen.getByText(expectedMessage)).toBeInTheDocument()
   })
