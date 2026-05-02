@@ -19,6 +19,7 @@ docker compose up --build
 - backend health: http://localhost:30000/up
 - mysql: `localhost:33006`
 - backend はホストの `~/.copilot` を read-only で `/copilot-home` にマウントし、`COPILOT_HOME=/copilot-home` で会話履歴を参照します。
+- backend の `/app/tmp` は named volume のため、古い `tmp/pids/server.pid` が見えないまま残ることがあります。起動時に stale PID を削除してから Rails を立ち上げます。
 
 ## テスト
 

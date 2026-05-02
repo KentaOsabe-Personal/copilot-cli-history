@@ -74,10 +74,13 @@ export function useSessionIndex(
         }
       }
 
-      setSettledState({
+      const nextEnvelope = {
         client,
         state: nextState,
-      })
+      }
+
+      settledStateRef.current = nextEnvelope
+      setSettledState(nextEnvelope)
     },
     [client],
   )

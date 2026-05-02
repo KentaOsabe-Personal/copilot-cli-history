@@ -132,8 +132,8 @@
   - _Boundary: SessionIndexPage_
   - _Depends: 5.1, 5.2_
 
-- [ ] 6. Feature 全体の regression と境界を検証する
-- [ ] 6.1 frontend の lint、build、test を通して統合回帰を確認する
+- [x] 6. Feature 全体の regression と境界を検証する
+- [x] 6.1 frontend の lint、build、test を通して統合回帰を確認する
   - frontend の型検査と build が通り、新しい同期型・hook・component の import 境界に破綻がないことを確認する
   - frontend test suite が通り、既存 detail page、session list、summary card、status panel の回帰がないことを確認する
   - 差分が frontend の一覧同期導線に閉じ、backend 同期処理、raw files 編集、検索/filter/auto refresh/polling/auth の機能追加がないことを確認する

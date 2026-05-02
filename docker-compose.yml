@@ -23,7 +23,7 @@ services:
       dockerfile: Dockerfile.backend
     container_name: copilot-cli-history-backend
     working_dir: /app
-    command: bash -c "bundle install && bin/rails db:prepare && bin/rails server -b 0.0.0.0 -p 30000"
+    command: bash -c "rm -f tmp/pids/server.pid && bundle install && bin/rails db:prepare && exec bin/rails server -b 0.0.0.0 -p 30000"
     ports:
       - "30000:30000"
     volumes:
