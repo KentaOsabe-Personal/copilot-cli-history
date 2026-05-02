@@ -35,4 +35,24 @@ describe('StatusPanel', () => {
       }),
     ).toHaveAttribute('href', '/')
   })
+
+  it('renders a custom action slot when provided', () => {
+    render(
+      <MemoryRouter>
+        <StatusPanel
+          variant="empty"
+          title="セッションがありません"
+          message="履歴を取り込むと一覧に表示されます。"
+          action={
+            <button type="button" className="rounded-full px-4 py-2">
+              履歴を取り込む
+            </button>
+          }
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('button', { name: '履歴を取り込む' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'セッション一覧へ戻る' })).not.toBeInTheDocument()
+  })
 })

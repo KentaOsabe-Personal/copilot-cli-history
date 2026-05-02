@@ -55,15 +55,15 @@
   - _Requirements: 1.2, 1.3, 1.4, 1.5, 2.1, 2.3, 2.4, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 4.4, 4.5_
   - _Boundary: useHistorySync_
 
-- [ ] 4. 同期操作と状態表示の presentation component を追加する
-- [ ] 4.1 既存 status panel に action を載せられる表示余地を追加する
+- [x] 4. 同期操作と状態表示の presentation component を追加する
+- [x] 4.1 既存 status panel に action を載せられる表示余地を追加する
   - loading、empty、error の既存表示文脈を壊さず、必要な場合だけ action を表示できる
   - action がない既存利用箇所では見た目とアクセシビリティ上の意味が変わらない
   - 完了時には空状態に primary action を置ける一方で、既存 loading/error panel の表示回帰がない
   - _Requirements: 3.1, 3.2, 5.1_
   - _Boundary: StatusPanel_
 
-- [ ] 4.2 (P) 一覧上部の履歴最新化操作を表示する
+- [x] 4.2 (P) 一覧上部の履歴最新化操作を表示する
   - 一覧画面の見出し付近に利用者が明示的に同期を開始できる操作を表示する
   - syncing 中は操作を disabled にし、同期中であることが button 表示から分かる
   - terminal state 後は再試行できる通常操作へ戻る
@@ -73,7 +73,7 @@
   - _Boundary: HistorySyncControl_
   - _Depends: 3.1_
 
-- [ ] 4.3 (P) 同期結果を成功一覧と誤認しない status banner として表示する
+- [x] 4.3 (P) 同期結果を成功一覧と誤認しない status banner として表示する
   - 同期完了と一覧再取得完了を、保存件数と劣化件数だけの最小情報で表示する
   - 同期後も empty の場合は失敗ではない空状態として表示する
   - refresh error、conflict、sync error をそれぞれ異なる失敗・保留状態として表示する
@@ -83,7 +83,7 @@
   - _Boundary: HistorySyncStatus_
   - _Depends: 3.1_
 
-- [ ] 4.4 空状態から同じ同期要求を開始できる primary action を表示する
+- [x] 4.4 空状態から同じ同期要求を開始できる primary action を表示する
   - セッションが空である状態を loading/error と区別して表示する
   - 空状態内の履歴取り込み操作は一覧上部と同じ同期 callback を使う
   - syncing 中は空状態 action も disabled になり、二重実行できない
@@ -93,7 +93,7 @@
   - _Boundary: SessionEmptyState_
   - _Depends: 3.1, 4.1_
 
-- [ ] 4.5 presentation component の表示契約をテストで固定する
+- [x] 4.5 presentation component の表示契約をテストで固定する
   - 同期 control の通常、syncing、terminal 後再試行状態を確認する
   - status banner の success、empty、refresh error、conflict、sync error 表示を確認する
   - empty state の primary action、disabled、synced_empty 補足を確認する
@@ -102,8 +102,8 @@
   - _Requirements: 1.1, 1.3, 1.4, 2.3, 2.4, 2.5, 3.1, 3.2, 3.4, 3.5, 4.1, 4.2, 4.3_
   - _Boundary: HistorySyncControl, HistorySyncStatus, SessionEmptyState, StatusPanel_
 
-- [ ] 5. 一覧 page へ同期 UI と既存閲覧体験を統合する
-- [ ] 5.1 同期 control、status、empty action、既存 list rendering を同じ一覧 route で合成する
+- [x] 5. 一覧 page へ同期 UI と既存閲覧体験を統合する
+- [x] 5.1 同期 control、status、empty action、既存 list rendering を同じ一覧 route で合成する
   - 一覧 page の見出し付近に同期 control を表示し、空状態には同じ同期要求を開始する primary action を表示する
   - 同期成功後は reload outcome に応じて既存 session list または空状態を表示し、完了状態も併せて示す
   - 初回一覧取得 error と同期 error は混同せず、別の状態として表示する
@@ -113,7 +113,7 @@
   - _Boundary: SessionIndexPage_
   - _Depends: 2.1, 3.1, 4.2, 4.3, 4.4_
 
-- [ ] 5.2 page 側の表示合成で同期中・失敗時の閲覧状態を保つ
+- [x] 5.2 page 側の表示合成で同期中・失敗時の閲覧状態を保つ
   - 既に session list が表示されている場合、syncing banner や disabled 操作が出ても page 側の条件分岐で list を隠さない
   - 同期失敗や refresh error のとき、既存一覧を同期成功後の最新一覧として扱う表示を出さない
   - 詳細 link と summary card は既存 component contract をそのまま使い、SessionList 自体は変更しない
@@ -122,7 +122,7 @@
   - _Boundary: SessionIndexPage_
   - _Depends: 5.1_
 
-- [ ] 5.3 page integration test で主要ユーザーフローを固定する
+- [x] 5.3 page integration test で主要ユーザーフローを固定する
   - 一覧上部の同期操作と空状態の取り込み操作が同じ同期要求を開始することを確認する
   - 同期中は上部操作と空状態 action が disabled になり、二重実行されないことを確認する
   - 同期成功後の sessions 表示、同期後 empty、refresh error、conflict、sync error を確認する

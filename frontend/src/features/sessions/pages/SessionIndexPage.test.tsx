@@ -4,14 +4,21 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { SessionSummary } from '../api/sessionApi.types.ts'
+import type { HistorySyncState, UseHistorySyncResult } from '../hooks/useHistorySync.ts'
+import { useHistorySync } from '../hooks/useHistorySync.ts'
 import type { SessionIndexState, UseSessionIndexResult } from '../hooks/useSessionIndex.ts'
 import { useSessionIndex } from '../hooks/useSessionIndex.ts'
 import SessionIndexPage from './SessionIndexPage.tsx'
+
+vi.mock('../hooks/useHistorySync.ts', () => ({
+  useHistorySync: vi.fn(),
+}))
 
 vi.mock('../hooks/useSessionIndex.ts', () => ({
   useSessionIndex: vi.fn(),
 }))
 
+const mockedUseHistorySync = vi.mocked(useHistorySync)
 const mockedUseSessionIndex = vi.mocked(useSessionIndex)
 
 function buildUseSessionIndexResult(state: SessionIndexState): UseSessionIndexResult {
@@ -24,6 +31,18 @@ function buildUseSessionIndexResult(state: SessionIndexState): UseSessionIndexRe
     state,
     isRefreshing: false,
     reloadSessions: async () => reloadOutcome,
+  }
+}
+
+function buildUseHistorySyncResult(
+  state: HistorySyncState = { status: 'idle' },
+  overrides: Partial<Pick<UseHistorySyncResult, 'isSyncing' | 'startSync'>> = {},
+): UseHistorySyncResult {
+  return {
+    state,
+    isSyncing: state.status === 'syncing',
+    startSync: vi.fn(async () => undefined),
+    ...overrides,
   }
 }
 
@@ -57,7 +76,9 @@ function buildSessionSummary(overrides: Partial<SessionSummary> = {}): SessionSu
 
 describe('SessionIndexPage', () => {
   beforeEach(() => {
+    mockedUseHistorySync.mockReset()
     mockedUseSessionIndex.mockReset()
+    mockedUseHistorySync.mockReturnValue(buildUseHistorySyncResult())
   })
 
   it('renders a loading panel while the session index is being fetched', () => {
@@ -70,10 +91,11 @@ describe('SessionIndexPage', () => {
     )
 
     expect(screen.getByRole('heading', { name: 'セッション一覧' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '履歴を最新化' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'セッション一覧を読み込んでいます' })).toBeInTheDocument()
   })
 
-  it('renders an empty panel when the backend returns no sessions', () => {
+  it('renders an empty-state sync action when the backend returns no sessions', () => {
     mockedUseSessionIndex.mockReturnValue(buildUseSessionIndexResult({ status: 'empty' }))
 
     render(
@@ -82,7 +104,9 @@ describe('SessionIndexPage', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('表示できるセッションはありません。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '履歴を最新化' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'まだ表示できるセッションがありません' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '履歴を取り込む' })).toBeInTheDocument()
   })
 
   it('renders ordered session cards without placeholder-only work context or model metadata', () => {
@@ -118,9 +142,10 @@ describe('SessionIndexPage', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getAllByRole('heading', { level: 3 }).map((node) => node.textContent)).toEqual([
-      'session-b',
-      'session-a',
+    expect(screen.getByRole('button', { name: '履歴を最新化' })).toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: /を開く$/ }).map((node) => node.getAttribute('href'))).toEqual([
+      '/sessions/session-b',
+      '/sessions/session-a',
     ])
     expect(screen.getAllByText('一部欠損あり')).toHaveLength(1)
     expect(screen.getByText('時刻不明')).toBeInTheDocument()
@@ -178,6 +203,7 @@ describe('SessionIndexPage', () => {
       </MemoryRouter>,
     )
 
+    expect(screen.getByRole('button', { name: '履歴を最新化' })).toBeInTheDocument()
     expect(screen.getByText('4 件の会話')).toBeInTheDocument()
     expect(screen.getByText('次の実装方針を相談したい')).toBeInTheDocument()
     expect(screen.getByText('2026-04-26 19:05:00 JST')).toBeInTheDocument()
@@ -210,6 +236,7 @@ describe('SessionIndexPage', () => {
       </MemoryRouter>,
     )
 
+    expect(screen.getByRole('button', { name: '履歴を最新化' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'セッション一覧を表示できません' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'session-123 を開く' })).not.toBeInTheDocument()
   })
@@ -242,5 +269,250 @@ describe('SessionIndexPage', () => {
     await user.click(screen.getByRole('link', { name: 'session-123 を開く' }))
 
     expect(screen.getByText('detail route')).toBeInTheDocument()
+  })
+
+  it('starts the same sync request from the top control and the empty-state action', async () => {
+    const user = userEvent.setup()
+    const startSync = vi.fn(async () => undefined)
+
+    mockedUseSessionIndex.mockReturnValue(buildUseSessionIndexResult({ status: 'empty' }))
+    mockedUseHistorySync.mockReturnValue(
+      buildUseHistorySyncResult({ status: 'idle' }, { startSync }),
+    )
+
+    render(
+      <MemoryRouter>
+        <SessionIndexPage />
+      </MemoryRouter>,
+    )
+
+    await user.click(screen.getByRole('button', { name: '履歴を最新化' }))
+    await user.click(screen.getByRole('button', { name: '履歴を取り込む' }))
+
+    expect(startSync).toHaveBeenCalledTimes(2)
+  })
+
+  it('disables both sync actions while syncing from an empty page', () => {
+    mockedUseSessionIndex.mockReturnValue(buildUseSessionIndexResult({ status: 'empty' }))
+    mockedUseHistorySync.mockReturnValue(buildUseHistorySyncResult({ status: 'syncing' }))
+
+    render(
+      <MemoryRouter>
+        <SessionIndexPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('button', { name: '履歴を同期中...' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '履歴を取り込み中...' })).toBeDisabled()
+  })
+
+  it('renders synced sessions with a completion banner and the existing list', () => {
+    mockedUseSessionIndex.mockReturnValue(buildUseSessionIndexResult({
+      status: 'success',
+      sessions: [buildSessionSummary()],
+      meta: {
+        count: 1,
+        partial_results: false,
+      },
+    }))
+    mockedUseHistorySync.mockReturnValue(buildUseHistorySyncResult({
+      status: 'synced_with_sessions',
+      result: {
+        sync_run: {
+          id: 42,
+          status: 'completed',
+          started_at: '2026-04-30T09:00:00Z',
+          finished_at: '2026-04-30T09:00:03Z',
+        },
+        counts: {
+          processed_count: 5,
+          inserted_count: 2,
+          updated_count: 1,
+          saved_count: 3,
+          skipped_count: 2,
+          failed_count: 0,
+          degraded_count: 0,
+        },
+      },
+    }))
+
+    render(
+      <MemoryRouter>
+        <SessionIndexPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('heading', { name: '履歴を最新化しました' })).toBeInTheDocument()
+    expect(screen.getByText('3 件を保存しました。')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'session-123 を開く' })).toBeInTheDocument()
+  })
+
+  it('renders a synced-empty banner and keeps the empty state distinct from failure', () => {
+    mockedUseSessionIndex.mockReturnValue(buildUseSessionIndexResult({ status: 'empty' }))
+    mockedUseHistorySync.mockReturnValue(buildUseHistorySyncResult({
+      status: 'synced_empty',
+      result: {
+        sync_run: {
+          id: 42,
+          status: 'completed',
+          started_at: '2026-04-30T09:00:00Z',
+          finished_at: '2026-04-30T09:00:03Z',
+        },
+        counts: {
+          processed_count: 1,
+          inserted_count: 0,
+          updated_count: 0,
+          saved_count: 0,
+          skipped_count: 1,
+          failed_count: 0,
+          degraded_count: 0,
+        },
+      },
+    }))
+
+    render(
+      <MemoryRouter>
+        <SessionIndexPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('heading', { name: '履歴の同期は完了しました' })).toBeInTheDocument()
+    expect(screen.getByText('取り込みは完了しましたが、表示できるセッションはまだありません。')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '履歴を取り込む' })).toBeInTheDocument()
+  })
+
+  it.each([
+    {
+      name: 'refresh error',
+      syncState: {
+        status: 'refresh_error',
+        result: {
+          sync_run: {
+            id: 42,
+            status: 'completed',
+            started_at: '2026-04-30T09:00:00Z',
+            finished_at: '2026-04-30T09:00:03Z',
+          },
+          counts: {
+            processed_count: 5,
+            inserted_count: 2,
+            updated_count: 1,
+            saved_count: 3,
+            skipped_count: 2,
+            failed_count: 0,
+            degraded_count: 0,
+          },
+        },
+        error: {
+          kind: 'backend',
+          httpStatus: 503,
+          code: 'root_missing',
+          message: 'history root does not exist',
+          details: { path: '/tmp/.copilot' },
+        },
+      } satisfies HistorySyncState,
+      heading: '履歴の同期は完了しましたが、最新の一覧を表示できません',
+    },
+    {
+      name: 'conflict',
+      syncState: {
+        status: 'conflict',
+        error: {
+          kind: 'backend',
+          httpStatus: 409,
+          code: 'history_sync_running',
+          message: 'history sync is already running',
+          details: { sync_run_id: 7 },
+        },
+      } satisfies HistorySyncState,
+      heading: '履歴同期はすでに進行中の可能性があります',
+    },
+    {
+      name: 'sync error',
+      syncState: {
+        status: 'sync_error',
+        error: {
+          kind: 'network',
+          code: 'network_error',
+          message: 'Network request failed',
+          details: { cause: 'Failed to fetch' },
+        },
+      } satisfies HistorySyncState,
+      heading: '履歴を同期できませんでした',
+    },
+  ])('renders the %s banner without hiding the current list', ({ syncState, heading }) => {
+    mockedUseSessionIndex.mockReturnValue(buildUseSessionIndexResult({
+      status: 'success',
+      sessions: [buildSessionSummary()],
+      meta: {
+        count: 1,
+        partial_results: false,
+      },
+    }))
+    mockedUseHistorySync.mockReturnValue(buildUseHistorySyncResult(syncState))
+
+    render(
+      <MemoryRouter>
+        <SessionIndexPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('heading', { name: heading })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'session-123 を開く' })).toBeInTheDocument()
+  })
+
+  it('keeps the existing session list visible while a sync is in progress', () => {
+    mockedUseSessionIndex.mockReturnValue(buildUseSessionIndexResult({
+      status: 'success',
+      sessions: [buildSessionSummary()],
+      meta: {
+        count: 1,
+        partial_results: false,
+      },
+    }))
+    mockedUseHistorySync.mockReturnValue(buildUseHistorySyncResult({ status: 'syncing' }))
+
+    render(
+      <MemoryRouter>
+        <SessionIndexPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('button', { name: '履歴を同期中...' })).toBeDisabled()
+    expect(screen.getByRole('link', { name: 'session-123 を開く' })).toBeInTheDocument()
+  })
+
+  it('shows sync failures separately from the initial index error state', () => {
+    mockedUseSessionIndex.mockReturnValue(buildUseSessionIndexResult({
+      status: 'error',
+      error: {
+        kind: 'backend',
+        httpStatus: 503,
+        code: 'root_missing',
+        message: 'history root does not exist',
+        details: {
+          path: '/tmp/.copilot',
+        },
+      },
+    }))
+    mockedUseHistorySync.mockReturnValue(buildUseHistorySyncResult({
+      status: 'sync_error',
+      error: {
+        kind: 'backend',
+        httpStatus: 500,
+        code: 'history_sync_failed',
+        message: 'history sync failed',
+        details: {},
+      },
+    }))
+
+    render(
+      <MemoryRouter>
+        <SessionIndexPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('heading', { name: '履歴を同期できませんでした' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'セッション一覧を表示できません' })).toBeInTheDocument()
   })
 })
