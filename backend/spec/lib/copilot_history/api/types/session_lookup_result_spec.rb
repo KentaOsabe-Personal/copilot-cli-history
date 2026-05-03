@@ -23,6 +23,16 @@ RSpec.describe CopilotHistory::Api::Types::SessionLookupResult do
       expect(result).not_to respond_to(:root)
       expect(result).not_to respond_to(:session)
     end
+
+    it "exposes legacy presenter state only when explicitly provided" do
+      session = instance_double("NormalizedSession")
+      result = described_class.new(root: nil, session:)
+
+      expect(result).to respond_to(:root)
+      expect(result).to respond_to(:session)
+      expect(result.root).to be_nil
+      expect(result.session).to eq(session)
+    end
   end
 
   describe described_class::NotFound do

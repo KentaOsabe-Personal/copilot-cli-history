@@ -3,16 +3,19 @@ module CopilotHistory
     module Types
       module SessionLookupResult
         class Found
+          UNSET = Object.new.freeze
+          private_constant :UNSET
+
           def self.members
             [ :detail_payload ]
           end
 
           attr_reader :detail_payload
 
-          def initialize(detail_payload: nil, root: nil, session: nil)
+          def initialize(detail_payload: nil, root: UNSET, session: UNSET)
             @detail_payload = detail_payload
-            @root = root
-            @session = session
+            @root = root unless root.equal?(UNSET)
+            @session = session unless session.equal?(UNSET)
           end
 
           def ==(other)
@@ -28,20 +31,34 @@ module CopilotHistory
           end
 
           def method_missing(name, ...)
-            return @root if name == :root && defined?(@root)
-            return @session if name == :session && defined?(@session)
+            return @root if name == :root && legacy_root?
+            return @session if name == :session && legacy_session?
 
             super
+          end
+
+          def respond_to_missing?(name, include_private = false)
+            (name == :root && legacy_root?) ||
+              (name == :session && legacy_session?) ||
+              super
           end
 
           private
 
           def legacy_root_for_equality
-            @root
+            legacy_root? ? @root : UNSET
           end
 
           def legacy_session_for_equality
-            @session
+            legacy_session? ? @session : UNSET
+          end
+
+          def legacy_root?
+            instance_variable_defined?(:@root)
+          end
+
+          def legacy_session?
+            instance_variable_defined?(:@session)
           end
         end
 
