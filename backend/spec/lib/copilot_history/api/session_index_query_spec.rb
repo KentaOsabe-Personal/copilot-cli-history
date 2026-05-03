@@ -116,6 +116,26 @@ RSpec.describe CopilotHistory::Api::SessionIndexQuery do
       expect(result.meta).to eq({ count: 3, partial_results: false })
     end
 
+    it "does not ask MySQL to sort rows that include JSON payload columns" do
+      create_session(session_id: "same-b", updated_at_source: "2026-04-26T10:00:00Z")
+      create_session(session_id: "same-a", updated_at_source: "2026-04-26T10:00:00Z")
+
+      sql_statements = []
+      subscriber = lambda do |_name, _started, _finished, _unique_id, payload|
+        sql = payload[:sql]
+        sql_statements << sql if sql.match?(/\ASELECT .*copilot_sessions/i)
+      end
+
+      ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
+        query.call(
+          from_time: Time.zone.parse("2026-04-01T00:00:00Z"),
+          to_time: Time.zone.parse("2026-04-30T23:59:59Z")
+        )
+      end
+
+      expect(sql_statements).not_to include(match(/ORDER BY COALESCE/i))
+    end
+
     it "supports one-sided ranges and returns an empty success when no rows match" do
       create_session(session_id: "before", updated_at_source: "2026-04-01T00:00:00Z")
       create_session(session_id: "after", updated_at_source: "2026-05-01T00:00:00Z")

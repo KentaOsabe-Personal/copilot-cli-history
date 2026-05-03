@@ -46,8 +46,8 @@
   - _Requirements: 1.1, 1.4, 1.5, 3.5, 4.1, 4.4, 4.5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 6.1, 6.3, 6.4, 6.5_
   - _Depends: 2, 3, 4_
 
-- [ ] 6. API 契約と回帰を検証する
-- [ ] 6.1 一覧 API の request contract を保存済み read model 基準で固定する
+- [x] 6. API 契約と回帰を検証する
+- [x] 6.1 一覧 API の request contract を保存済み read model 基準で固定する
   - current と legacy の保存済み payload が共通一覧 shape として返ることを確認する
   - read model 空状態、日付範囲、片側範囲、既定直近 30 日、表示日時順、同一日時の session ID 順、`limit` を request spec で確認する
   - 日付不明 row が範囲一致から除外され、不正な `from` / `to` / `limit` が 400 として観測できる
@@ -55,7 +55,7 @@
   - 一覧 API の request spec が raw root failure ではなく DB 空成功を期待する形に更新されている
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 3.1, 3.2, 3.3, 3.4, 3.5, 5.3, 5.4, 5.5, 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 6.2 詳細 API の request contract を保存済み detail payload 基準で固定する
+- [x] 6.2 詳細 API の request contract を保存済み detail payload 基準で固定する
   - 保存済み detail payload の header、message snapshots、conversation、activity、timeline、degraded、issue 情報が既存詳細 shape で返ることを確認する
   - current と legacy の詳細が共通契約で返ることを確認する
   - 未登録 session ID が 404、`session_not_found`、対象 session ID の details を返すことを確認する
@@ -63,7 +63,7 @@
   - `include_raw=true` の request でも raw files 再読取を行わず、保存済み detail payload の範囲だけが返ることを確認する
   - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 5.1, 5.2, 5.3, 5.6, 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 6.3 backend の対象 spec と品質ゲートを通す
+- [x] 6.3 backend の対象 spec と品質ゲートを通す
   - 一覧条件、一覧取得、詳細取得、error envelope、request contract の対象 spec を実行して失敗がない状態にする
   - DB schema 変更や新規 gem なしで実装が完結していることを確認する
   - backend 品質確認コマンドで session API 周辺の regression がないことを観測できる
@@ -72,3 +72,4 @@
 ## Implementation Notes
 
 - Docker Compose の backend service は既定で `RAILS_ENV=development` のため、backend RSpec 検証では `docker compose run --rm -e RAILS_ENV=test backend bundle exec rspec` を使う。
+- MySQL では `summary_payload` を含む `SELECT *` に `ORDER BY COALESCE(updated_at_source, created_at_source)` を掛けると sort buffer を超えることがあるため、一覧 query は narrow pluck 後に Ruby 側で安定 sort してから payload を取得する。
