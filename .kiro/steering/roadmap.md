@@ -39,3 +39,7 @@
 - [ ] history-sync-api -- raw files を読み取り、DB read model へ同期する service と明示同期 API を追加する。Dependencies: history-db-read-model
 - [ ] frontend-history-sync-ui -- frontend に履歴最新化ボタン、DB 空状態、同期中・成功・失敗表示を追加する。Dependencies: history-sync-api
 - [ ] session-api-db-query -- 既存 session list/detail API を DB query に切り替え、日付範囲指定を DB 側で処理する。Dependencies: history-db-read-model, history-sync-api, frontend-history-sync-ui
+
+## Follow-up Specs
+
+- [ ] session-date-filtering -- セッション一覧に日付フィルタ UI を追加し、初期表示を直近 1 週間へ絞り、長い履歴表示によるページ全体の横スクロールを抑制する。Dependencies: session-api-db-query, frontend-session-ui, frontend-history-sync-ui
