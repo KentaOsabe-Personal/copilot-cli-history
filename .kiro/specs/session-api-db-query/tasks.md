@@ -27,7 +27,7 @@
   - _Boundary: SessionIndexQuery_
   - _Depends: 1_
 
-- [ ] 4. (P) 保存済み detail payload からセッション詳細を取得する
+- [x] 4. (P) 保存済み detail payload からセッション詳細を取得する
   - 指定された session ID と保存済み read model を完全一致で照合する
   - 見つかった場合は保存済み detail payload を詳細 data としてそのまま返し、current と legacy を共通契約で扱う
   - 見つからない場合は `session_not_found` と対象 session ID を持つ未登録結果として返す
