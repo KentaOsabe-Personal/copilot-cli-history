@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. 保存済み read model API の共通結果とエラー契約を整える
+- [x] 1. 保存済み read model API の共通結果とエラー契約を整える
   - 一覧の成功結果、一覧条件不正、詳細の発見結果、未登録結果を HTTP 境界が判別できる形に揃える
   - 未登録詳細は root failure ではなく保存済み read model の未登録状態として扱えるようにする
   - 一覧条件不正は `invalid_session_list_query`、未登録詳細は `session_not_found` として成功応答から区別できる envelope で返せる
@@ -68,3 +68,7 @@
   - DB schema 変更や新規 gem なしで実装が完結していることを確認する
   - backend 品質確認コマンドで session API 周辺の regression がないことを観測できる
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 3.1, 3.2, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 4.4, 4.5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 6.1, 6.2, 6.3, 6.4, 6.5_
+
+## Implementation Notes
+
+- Docker Compose の backend service は既定で `RAILS_ENV=development` のため、backend RSpec 検証では `docker compose run --rm -e RAILS_ENV=test backend bundle exec rspec` を使う。
