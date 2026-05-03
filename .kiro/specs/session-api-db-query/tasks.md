@@ -37,7 +37,7 @@
   - _Boundary: SessionDetailQuery_
   - _Depends: 1_
 
-- [ ] 5. HTTP session API を保存済み read model の取得経路へ統合する
+- [x] 5. HTTP session API を保存済み read model の取得経路へ統合する
   - 一覧 request では query 実行前に一覧条件を検証し、不正条件は 400 の error envelope として返す
   - 一覧成功時は保存済み summary payload 群と meta を既存 top-level structure で返す
   - 詳細 request では保存済み detail payload を既存 top-level structure で返し、未登録 session ID は 404 の `session_not_found` として返す
