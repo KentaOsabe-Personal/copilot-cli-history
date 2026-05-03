@@ -1,6 +1,6 @@
 # プロジェクト構造
 
-updated_at: 2026-04-29
+updated_at: 2026-05-03
 
 ## 組織方針
 
@@ -24,10 +24,20 @@ updated_at: 2026-04-29
 **Purpose**: Rails API、読取ロジック、永続化、API 提供を担う  
 **Example**: `app/controllers/api` は薄い HTTP 入口に保ち、`config/` に環境設定、`spec/` に request/lib/support 系のテストを配置する
 
+### Backend read models
+**Location**: `/backend/app/models/`, `/backend/db/migrate/`  
+**Purpose**: API 表示用 read model と同期履歴を ActiveRecord の境界として保持する  
+**Example**: `CopilotSession` は summary/detail payload と source fingerprint、`HistorySyncRun` は同期状態・件数・失敗概要を持つ
+
 ### Backend domain namespace
 **Location**: `/backend/lib/copilot_history/`  
 **Purpose**: Copilot 履歴の読取・正規化・API 向け整形を Rails 本体から分離して置く  
 **Example**: `api/session_index_query.rb`, `api/presenters/session_detail_presenter.rb`, `projections/activity_projector.rb`, `types/normalized_session.rb`
+
+### Backend persistence / sync namespace
+**Location**: `/backend/lib/copilot_history/persistence/`, `/backend/lib/copilot_history/sync/`  
+**Purpose**: raw reader の normalized session を DB payload に変換し、明示同期 API から insert / update / skip を実行する  
+**Example**: `SessionRecordBuilder` と `SourceFingerprintBuilder` で保存属性を作り、`HistorySyncService` が `HistorySyncRun` と `CopilotSession` を更新する
 
 ### Database bootstrap
 **Location**: `/mysql/`  
@@ -73,6 +83,7 @@ end
 - Rails の autoload と規約配置を基本にする
 - `lib/` 配下は `config.autoload_lib` で読み込む前提に寄せ、手動 require を増やしすぎない
 - API 向けの orchestration は `CopilotHistory::Api` 名前空間に集め、controller に整形ロジックを溜めない
+- 永続化変換は `CopilotHistory::Persistence`、同期 orchestration は `CopilotHistory::Sync` に分け、query / presenter / reader と混ぜない
 
 ## コード構成の原則
 
@@ -91,12 +102,22 @@ Compose、Dockerfile、README、Kiro 関連はルートで管理します。
 request routing と response status は controller が担い、履歴の読取・検索・整形は `lib/copilot_history` に寄せます。  
 `query -> presenter -> types` の流れを保ち、UI 向け schema の都合を reader 層へ逆流させません。
 
-### 4. フロントエンドは UI の近くにテストを置く
+### 4. DB read model と raw reader の境界を分ける
+
+raw files の探索・正規化は reader / projections / types に閉じ、DB 保存用の shape は persistence namespace で作ります。  
+session API の query は `CopilotSession` を参照し、raw reader へ直接戻らない構成を基本にします。
+
+### 5. 同期 UI は sessions feature の中に閉じる
+
+履歴同期ボタン、同期状態表示、空状態からの同期導線は `frontend/src/features/sessions/` に置きます。  
+`useHistorySync` は API 呼び出しと一覧再読込を束ねますが、個別コンポーネントには同期結果の表示責務だけを渡します。
+
+### 6. フロントエンドは UI の近くにテストを置く
 
 小さな画面やコンポーネントは、実装ファイルの近くに `*.test.tsx` を置く構成を基本にします。  
 hook や presentation utility も同じ粒度で `*.test.ts` / `*.test.tsx` を併置し、グローバルなテスト初期化だけを `src/test/` に切り出します。
 
-### 5. 新しい知識は steering か specs に寄せる
+### 7. 新しい知識は steering か specs に寄せる
 
 リポジトリ全体に効くルールは `steering` に、機能固有の詳細は `specs` に置きます。  
 新しいコードが既存パターンに従うなら、steering を毎回増やす必要はありません。

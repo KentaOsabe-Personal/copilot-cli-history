@@ -1,11 +1,12 @@
 # 技術スタック
 
-updated_at: 2026-04-29
+updated_at: 2026-05-03
 
 ## アーキテクチャ
 
 このリポジトリは、**frontend / backend / MySQL を Docker Compose で束ねるモノレポ**です。  
-フロントエンドは React ベースの SPA、バックエンドは Rails API、データ永続化は MySQL という責務分離を基本にします。
+フロントエンドは React ベースの SPA、バックエンドは Rails API、データ永続化は MySQL という責務分離を基本にします。  
+Copilot CLI の raw files は同期時に読み取り、通常の一覧・詳細 API は MySQL 上の read model を参照します。
 
 ## コア技術
 
@@ -23,6 +24,7 @@ updated_at: 2026-04-29
 - **RSpec Rails**: バックエンドの API / lib / request spec を支える
 - **Rack CORS**: SPA と Rails API の分離を保ったままローカル接続を許可する
 - **RuboCop / bundler-audit / Brakeman**: Ruby 側のスタイル・依存関係・セキュリティを継続確認する
+- **ActiveRecord models**: `CopilotSession` と `HistorySyncRun` を read model と同期履歴の永続化境界として使う
 
 ## 開発標準
 
@@ -42,6 +44,7 @@ updated_at: 2026-04-29
 - フロントエンドは `pnpm test` で Vitest を実行する
 - フロントエンドの検証は component / hook / presentation utility を小さく分けて行う
 - バックエンドは `bundle exec rspec` を使い、`spec/requests` や `spec/lib` を軸に確認する
+- DB schema / model の振る舞いは `spec/db` と `spec/models` に切り出し、reader / presenter の unit spec と分ける
 - ローカル実行は Docker Compose 経由を標準にし、環境差分を減らす
 
 ## 開発環境
@@ -100,12 +103,27 @@ Vite + React + TypeScript を中心に、初期段階では過度な抽象化や
 履歴 reader は保存形式ごとの差を読み取り層で吸収し、API から見える shape は共通化します。  
 UI や controller で format 分岐を増やすより、`copilot_history` 配下の query / presenter / types に寄せます。
 
-### 6. root failure と partial degradation を分けて返す
+### 6. read model は再生成可能な補助層として扱う
+
+`copilot_sessions` は raw files から作り直せる summary / detail payload を保持し、API の表示速度と絞り込みを支えます。  
+raw files を一次ソースから外さず、payload builder と fingerprint 比較で insert / update / skip を判断します。
+
+### 7. 同期は同期的な API 操作として扱う
+
+`POST /api/history/sync` は初期実装では background job に逃がさず、同期中 lock と `HistorySyncRun` の状態で競合・失敗・部分劣化を表します。  
+Solid Queue など Rails 標準の非同期基盤は存在しても、履歴同期の正本フローとしてはまだ使わない前提です。
+
+### 8. session list は DB query と明示 params で絞る
+
+`GET /api/sessions` は DB の source timestamp を基準に並べ、`from` / `to` / `limit` を request params として受け取ります。  
+既定の表示範囲を API 側で制御し、frontend は同じ contract を再読込や同期後 refresh に使います。
+
+### 9. root failure と partial degradation を分けて返す
 
 履歴ルートが読めないときは共通 error envelope で失敗を返し、個別セッションの破損は degraded と issue 一覧に閉じ込めます。  
 「全部失敗」か「一部だけ壊れているか」を API 契約で区別するのが前提です。
 
-### 7. API 接続先は明示設定に限定する
+### 10. API 接続先は明示設定に限定する
 
 frontend は `VITE_API_BASE_URL` を必須の絶対 URL として扱います。  
 暗黙の相対パスに頼らず、SPA と Rails API の接続先を環境変数で明示する前提です。
