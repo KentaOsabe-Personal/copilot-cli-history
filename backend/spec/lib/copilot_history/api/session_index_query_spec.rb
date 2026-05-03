@@ -1,71 +1,171 @@
 require "rails_helper"
 
 RSpec.describe CopilotHistory::Api::SessionIndexQuery do
-  subject(:query) { described_class.new(session_catalog_reader: session_catalog_reader) }
-
-  let(:session_catalog_reader) { instance_double(CopilotHistory::SessionCatalogReader) }
+  subject(:query) { described_class.new }
 
   describe "#call" do
-    it "returns root failures from the reader without changing the public result shape" do
-      failure_result = CopilotHistory::Types::ReadResult::Failure.new(
-        failure: CopilotHistory::Types::ReadFailure.new(
-          code: CopilotHistory::Errors::ReadErrorCode::ROOT_MISSING,
-          path: "/tmp/copilot",
-          message: "history root does not exist"
-        )
+    it "returns stored summary payloads without reconstructing fields for current and legacy sessions" do
+      create_session(
+        session_id: "current-session",
+        source_format: "current",
+        updated_at_source: "2026-04-26T10:00:00Z",
+        summary_payload: {
+          "id" => "current-session",
+          "source_format" => "current",
+          "source_state" => "complete",
+          "workspace" => { "cwd" => "/work/current" },
+          "model" => "gpt-5",
+          "conversation_summary" => "current summary",
+          "degraded" => false,
+          "issues" => []
+        }
+      )
+      create_session(
+        session_id: "legacy-session",
+        source_format: "legacy",
+        updated_at_source: "2026-04-25T10:00:00Z",
+        summary_payload: {
+          "id" => "legacy-session",
+          "source_format" => "legacy",
+          "source_state" => "workspace_only",
+          "workspace" => { "cwd" => "/work/legacy" },
+          "model" => nil,
+          "conversation_summary" => "legacy summary",
+          "degraded" => true,
+          "issues" => [ { "code" => "legacy_issue" } ]
+        }
       )
 
-      expect(session_catalog_reader).to receive(:call).once.and_return(failure_result)
-
-      expect(query.call).to eq(failure_result)
-    end
-
-    it "sorts mixed current and legacy sessions deterministically while preserving issues" do
-      issue = CopilotHistory::Types::ReadIssue.new(
-        code: CopilotHistory::Errors::ReadErrorCode::CURRENT_WORKSPACE_PARSE_FAILED,
-        message: "workspace.yaml could not be parsed",
-        source_path: "/tmp/copilot/session-state/same-b/workspace.yaml",
-        severity: :error
+      result = query.call(
+        from_time: Time.zone.parse("2026-04-01T00:00:00Z"),
+        to_time: Time.zone.parse("2026-04-30T23:59:59Z")
       )
-      root = CopilotHistory::Types::ResolvedHistoryRoot.new(
-        root_path: "/tmp/copilot",
-        current_root: "/tmp/copilot/session-state",
-        legacy_root: "/tmp/copilot/history-session-state"
-      )
-      success_result = CopilotHistory::Types::ReadResult::Success.new(
-        root: root,
-        sessions: [
-          build_session(session_id: "epoch", source_format: :legacy),
-          build_session(session_id: "same-b", source_format: :current, created_at: "2026-04-26T09:00:00Z", issues: [ issue ]),
-          build_session(session_id: "latest", source_format: :current, updated_at: "2026-04-26T10:00:00Z"),
-          build_session(session_id: "same-a", source_format: :legacy, created_at: "2026-04-26T09:00:00Z")
+
+      expect(result).to be_a(CopilotHistory::Api::Types::SessionIndexResult::Success)
+      expect(result.data).to eq(
+        [
+          {
+            "id" => "current-session",
+            "source_format" => "current",
+            "source_state" => "complete",
+            "workspace" => { "cwd" => "/work/current" },
+            "model" => "gpt-5",
+            "conversation_summary" => "current summary",
+            "degraded" => false,
+            "issues" => []
+          },
+          {
+            "id" => "legacy-session",
+            "source_format" => "legacy",
+            "source_state" => "workspace_only",
+            "workspace" => { "cwd" => "/work/legacy" },
+            "model" => nil,
+            "conversation_summary" => "legacy summary",
+            "degraded" => true,
+            "issues" => [ { "code" => "legacy_issue" } ]
+          }
         ]
       )
+      expect(result.meta).to eq({ count: 2, partial_results: true })
+    end
 
-      expect(session_catalog_reader).to receive(:call).once.and_return(success_result)
+    it "uses updated source time before created source time and excludes rows without display time" do
+      create_session(
+        session_id: "uses-updated",
+        created_at_source: "2026-01-01T00:00:00Z",
+        updated_at_source: "2026-04-20T09:00:00Z"
+      )
+      create_session(
+        session_id: "uses-created",
+        created_at_source: "2026-04-20T08:00:00Z",
+        updated_at_source: nil
+      )
+      create_session(
+        session_id: "outside-created",
+        created_at_source: "2026-03-31T23:59:59Z",
+        updated_at_source: nil
+      )
+      create_session(
+        session_id: "missing-display-time",
+        created_at_source: nil,
+        updated_at_source: nil
+      )
 
-      result = query.call
+      result = query.call(
+        from_time: Time.zone.parse("2026-04-01T00:00:00Z"),
+        to_time: Time.zone.parse("2026-04-30T23:59:59Z")
+      )
 
-      expect(result).to be_a(CopilotHistory::Types::ReadResult::Success)
-      expect(result.root).to eq(root)
-      expect(result.sessions.map(&:session_id)).to eq(%w[latest same-a same-b epoch])
-      expect(result.sessions.find { |session| session.session_id == "same-b" }.issues).to eq([ issue ])
+      expect(result.data.map { |payload| payload["id"] }).to eq(%w[uses-updated uses-created])
+      expect(result.meta).to eq({ count: 2, partial_results: false })
+    end
+
+    it "sorts by display time descending and session id ascending before applying limit" do
+      create_session(session_id: "same-b", updated_at_source: "2026-04-26T10:00:00Z")
+      create_session(session_id: "latest", updated_at_source: "2026-04-27T10:00:00Z")
+      create_session(session_id: "same-a", updated_at_source: "2026-04-26T10:00:00Z")
+      create_session(session_id: "oldest", updated_at_source: "2026-04-25T10:00:00Z")
+
+      result = query.call(
+        from_time: Time.zone.parse("2026-04-01T00:00:00Z"),
+        to_time: Time.zone.parse("2026-04-30T23:59:59Z"),
+        limit: 3
+      )
+
+      expect(result.data.map { |payload| payload["id"] }).to eq(%w[latest same-a same-b])
+      expect(result.meta).to eq({ count: 3, partial_results: false })
+    end
+
+    it "supports one-sided ranges and returns an empty success when no rows match" do
+      create_session(session_id: "before", updated_at_source: "2026-04-01T00:00:00Z")
+      create_session(session_id: "after", updated_at_source: "2026-05-01T00:00:00Z")
+
+      from_result = query.call(from_time: Time.zone.parse("2026-04-15T00:00:00Z"))
+      to_result = query.call(to_time: Time.zone.parse("2026-04-15T00:00:00Z"))
+      empty_result = query.call(
+        from_time: Time.zone.parse("2026-06-01T00:00:00Z"),
+        to_time: Time.zone.parse("2026-06-30T23:59:59Z")
+      )
+
+      expect(from_result.data.map { |payload| payload["id"] }).to eq(%w[after])
+      expect(to_result.data.map { |payload| payload["id"] }).to eq(%w[before])
+      expect(empty_result).to eq(
+        CopilotHistory::Api::Types::SessionIndexResult::Success.new(
+          data: [],
+          meta: { count: 0, partial_results: false }
+        )
+      )
     end
   end
 
-  def build_session(session_id:, source_format:, created_at: nil, updated_at: nil, issues: [])
-    CopilotHistory::Types::NormalizedSession.new(
+  def create_session(session_id:, source_format: "current", created_at_source: nil, updated_at_source: nil, summary_payload: nil)
+    CopilotSession.create!(
       session_id: session_id,
       source_format: source_format,
-      created_at: created_at,
-      updated_at: updated_at,
-      selected_model: nil,
-      events: [],
-      message_snapshots: [],
-      issues: issues,
-      source_paths: {
-        source: "/tmp/copilot/#{session_id}.json"
-      }
+      source_state: "complete",
+      created_at_source: parse_time(created_at_source),
+      updated_at_source: parse_time(updated_at_source),
+      cwd: "/work/#{session_id}",
+      git_root: "/work/#{session_id}",
+      repository: "example/repo",
+      branch: "main",
+      selected_model: "gpt-5",
+      event_count: 1,
+      message_snapshot_count: 1,
+      issue_count: 0,
+      degraded: false,
+      conversation_preview: "summary",
+      message_count: 1,
+      activity_count: 1,
+      source_paths: { "source" => "/tmp/#{session_id}.json" },
+      source_fingerprint: { "complete" => true },
+      summary_payload: summary_payload || { "id" => session_id, "degraded" => false },
+      detail_payload: { "id" => session_id, "conversation" => [] },
+      indexed_at: Time.zone.parse("2026-04-30T00:00:00Z")
     )
+  end
+
+  def parse_time(value)
+    value && Time.zone.parse(value)
   end
 end

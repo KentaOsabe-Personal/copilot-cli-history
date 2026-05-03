@@ -1,32 +1,36 @@
 module CopilotHistory
   module Api
     class SessionIndexQuery
-      def initialize(session_catalog_reader: CopilotHistory::SessionCatalogReader.new)
-        @session_catalog_reader = session_catalog_reader
+      DISPLAY_TIME_SQL = "COALESCE(copilot_sessions.updated_at_source, copilot_sessions.created_at_source)".freeze
+
+      def initialize(model: CopilotSession)
+        @model = model
       end
 
-      def call
-        result = session_catalog_reader.call
-        return result if result.failure?
+      def call(from_time: nil, to_time: nil, limit: nil)
+        sessions = model
+          .where.not(updated_at_source: nil)
+          .or(model.where.not(created_at_source: nil))
 
-        CopilotHistory::Types::ReadResult::Success.new(
-          root: result.root,
-          sessions: result.sessions.sort_by do |session|
-            [
-              -sort_time_for(session).to_f,
-              session.session_id
-            ]
-          end
+        sessions = sessions.where("#{DISPLAY_TIME_SQL} >= ?", from_time) if from_time
+        sessions = sessions.where("#{DISPLAY_TIME_SQL} <= ?", to_time) if to_time
+        sessions = sessions.order(Arel.sql("#{DISPLAY_TIME_SQL} DESC"), :session_id)
+        sessions = sessions.limit(limit) if limit
+
+        data = sessions.map(&:summary_payload)
+
+        Types::SessionIndexResult::Success.new(
+          data: data,
+          meta: {
+            count: data.count,
+            partial_results: data.any? { |payload| payload["degraded"] == true }
+          }
         )
       end
 
       private
 
-      attr_reader :session_catalog_reader
-
-      def sort_time_for(session)
-        session.updated_at || session.created_at || Time.at(0)
-      end
+      attr_reader :model
     end
   end
 end

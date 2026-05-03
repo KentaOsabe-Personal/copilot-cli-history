@@ -17,7 +17,7 @@
   - _Boundary: SessionListParams_
   - _Depends: 1_
 
-- [ ] 3. (P) 保存済み read model からセッション一覧を取得する
+- [x] 3. (P) 保存済み read model からセッション一覧を取得する
   - 保存済み summary payload を一覧 item として返し、payload field を再構成せず current と legacy を共通契約で扱う
   - 表示日時は履歴由来の更新日時を優先し、欠落時は作成日時へ fallback し、どちらも欠落した row は日付範囲から除外する
   - 表示日時の降順と session ID の昇順で安定した順序を作り、日付範囲と順序を適用した後に `limit` を適用する
