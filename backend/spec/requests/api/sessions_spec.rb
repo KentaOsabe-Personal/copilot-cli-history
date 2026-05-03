@@ -1,190 +1,154 @@
 require "rails_helper"
 
-RSpec.describe "API Sessions", :copilot_history, type: :request do
-  around do |example|
-    original_copilot_home = ENV["COPILOT_HOME"]
-    original_home = ENV["HOME"]
-
-    example.run
-  ensure
-    ENV["COPILOT_HOME"] = original_copilot_home
-    ENV["HOME"] = original_home
-  end
+RSpec.describe "API Sessions", type: :request do
+  include ActiveSupport::Testing::TimeHelpers
 
   before do
     host! "localhost"
   end
 
   describe "GET /api/sessions" do
-    it "returns mixed current and legacy sessions in the shared summary schema with deterministic order" do
-      with_copilot_history_fixture("mixed_root") do |root|
-        events_path = root.join("session-state/current-mixed/events.jsonl")
-        ENV["COPILOT_HOME"] = root.to_s
-        events_path.write(<<~JSONL)
-          {"type":"user_message","role":"user","content":"mixed root current session","timestamp":"2026-04-26T10:00:01Z"}
-          {"type":"assistant_message","role":"assistant","content":"current follow up","timestamp":"2026-04-26T10:00:02Z"}
-        JSONL
+    it "returns current and legacy stored summary payloads through the existing top-level structure" do
+      create_copilot_session(
+        session_id: "legacy-session",
+        source_format: "legacy",
+        updated_at_source: "2026-04-26T09:00:00Z",
+        summary_payload: {
+          "id" => "legacy-session",
+          "source_format" => "legacy",
+          "created_at" => "2026-04-26T08:30:00Z",
+          "updated_at" => "2026-04-26T09:00:00Z",
+          "workspace" => { "cwd" => "/work/legacy-session" },
+          "model" => nil,
+          "source_state" => "complete",
+          "conversation_summary" => "legacy summary",
+          "degraded" => false,
+          "issues" => []
+        }
+      )
+      create_copilot_session(
+        session_id: "current-session",
+        source_format: "current",
+        updated_at_source: "2026-04-26T10:00:00Z",
+        summary_payload: {
+          "id" => "current-session",
+          "source_format" => "current",
+          "created_at" => "2026-04-26T09:30:00Z",
+          "updated_at" => "2026-04-26T10:00:00Z",
+          "workspace" => { "cwd" => "/work/current-session" },
+          "model" => "gpt-5",
+          "source_state" => "degraded",
+          "conversation_summary" => "current summary",
+          "degraded" => true,
+          "issues" => [ { "code" => "partial" } ]
+        }
+      )
 
-        get "/api/sessions"
+      get "/api/sessions", params: { from: "2026-04-01", to: "2026-04-30" }
 
-        expect(response).to have_http_status(:ok)
-        expect(JSON.parse(response.body, symbolize_names: true)).to eq(
-          data: [
-            {
-              id: "current-mixed",
-              source_format: "current",
-              created_at: "2026-04-26T10:00:00Z",
-              updated_at: "2026-04-26T10:00:02Z",
-              work_context: {
-                cwd: "/workspace/current-mixed",
-                git_root: "/workspace/current-mixed",
-                repository: "octo/example",
-                branch: "feature/history"
-              },
-              selected_model: nil,
-              source_state: "complete",
-              event_count: 2,
-              message_snapshot_count: 0,
-              conversation_summary: {
-                has_conversation: true,
-                message_count: 2,
-                preview: "mixed root current session",
-                activity_count: 0
-              },
-              degraded: false,
-              issues: []
-            },
-            {
-              id: "legacy-mixed",
-              source_format: "legacy",
-              created_at: "2026-04-26T07:50:00Z",
-              updated_at: nil,
-              work_context: {
-                cwd: nil,
-                git_root: nil,
-                repository: nil,
-                branch: nil
-              },
-              selected_model: "gpt-5.4",
-              source_state: "complete",
-              event_count: 1,
-              message_snapshot_count: 1,
-              conversation_summary: {
-                has_conversation: true,
-                message_count: 1,
-                preview: "legacy mixed event",
-                activity_count: 0
-              },
-              degraded: false,
-              issues: []
-            }
-          ],
-          meta: {
-            count: 2,
-            partial_results: false
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body, symbolize_names: true)).to eq(
+        data: [
+          {
+            id: "current-session",
+            source_format: "current",
+            created_at: "2026-04-26T09:30:00Z",
+            updated_at: "2026-04-26T10:00:00Z",
+            workspace: { cwd: "/work/current-session" },
+            model: "gpt-5",
+            source_state: "degraded",
+            conversation_summary: "current summary",
+            degraded: true,
+            issues: [ { code: "partial" } ]
+          },
+          {
+            id: "legacy-session",
+            source_format: "legacy",
+            created_at: "2026-04-26T08:30:00Z",
+            updated_at: "2026-04-26T09:00:00Z",
+            workspace: { cwd: "/work/legacy-session" },
+            model: nil,
+            source_state: "complete",
+            conversation_summary: "legacy summary",
+            degraded: false,
+            issues: []
           }
-        )
-      end
+        ],
+        meta: {
+          count: 2,
+          partial_results: true
+        }
+      )
     end
 
-    it "keeps session-scoped degradation in a 200 response instead of promoting it to a root failure" do
-      with_copilot_history_fixture("mixed_root") do |root|
-        events_path = root.join("session-state/current-mixed/events.jsonl")
-        workspace_path = root.join("session-state/current-mixed/workspace.yaml")
-        ENV["COPILOT_HOME"] = root.to_s
-        events_path.write(<<~JSONL)
-          {"type":"user_message","role":"user","content":"mixed root current session","timestamp":"2026-04-26T10:00:01Z"}
-          {"type":"assistant_message","role":"assistant","content":"current follow up","timestamp":"2026-04-26T10:00:02Z"}
-        JSONL
+    it "applies date ranges, display-time ordering, tie-break ordering, and limit at request level" do
+      create_copilot_session(session_id: "outside", updated_at_source: "2026-03-31T23:59:59Z")
+      create_copilot_session(session_id: "same-b", updated_at_source: "2026-04-26T10:00:00Z")
+      create_copilot_session(session_id: "latest", updated_at_source: "2026-04-27T10:00:00Z")
+      create_copilot_session(session_id: "same-a", updated_at_source: "2026-04-26T10:00:00Z")
+      create_copilot_session(session_id: "unknown-date", no_display_time: true)
 
-        with_permission_denied(workspace_path) do
-          get "/api/sessions"
+      get "/api/sessions", params: { from: "2026-04-01", to: "2026-04-30", limit: "3" }
 
-          expect(response).to have_http_status(:ok)
-          expect(JSON.parse(response.body, symbolize_names: true)).to eq(
-            data: [
-              {
-                id: "current-mixed",
-                source_format: "current",
-                created_at: nil,
-                updated_at: "2026-04-26T10:00:02Z",
-                work_context: {
-                  cwd: nil,
-                  git_root: nil,
-                  repository: nil,
-                  branch: nil
-                },
-                selected_model: nil,
-                source_state: "degraded",
-                event_count: 2,
-                message_snapshot_count: 0,
-                conversation_summary: {
-                  has_conversation: true,
-                  message_count: 2,
-                  preview: "mixed root current session",
-                  activity_count: 0
-                },
-                degraded: true,
-                issues: [
-                  {
-                    code: "current.workspace_unreadable",
-                    severity: "error",
-                    message: "workspace.yaml is not accessible",
-                    source_path: workspace_path.to_s,
-                    scope: "session",
-                    event_sequence: nil
-                  }
-                ]
-              },
-              {
-                id: "legacy-mixed",
-                source_format: "legacy",
-                created_at: "2026-04-26T07:50:00Z",
-                updated_at: nil,
-                work_context: {
-                  cwd: nil,
-                  git_root: nil,
-                  repository: nil,
-                  branch: nil
-                },
-                selected_model: "gpt-5.4",
-                source_state: "complete",
-                event_count: 1,
-                message_snapshot_count: 1,
-                conversation_summary: {
-                  has_conversation: true,
-                  message_count: 1,
-                  preview: "legacy mixed event",
-                  activity_count: 0
-                },
-                degraded: false,
-                issues: []
-              }
-            ],
-            meta: {
-              count: 2,
-              partial_results: true
-            }
-          )
-        end
-      end
+      expect(response).to have_http_status(:ok)
+      parsed = JSON.parse(response.body, symbolize_names: true)
+      expect(parsed[:data].map { |payload| payload[:id] }).to eq(%w[latest same-a same-b])
+      expect(parsed[:meta]).to eq(count: 3, partial_results: false)
     end
 
-    it "returns the shared 503 error envelope for root failures instead of an empty list" do
-      Dir.mktmpdir("copilot-history-home") do |home|
-        ENV.delete("COPILOT_HOME")
-        ENV["HOME"] = home
+    it "supports one-sided date ranges without mixing default date bounds" do
+      create_copilot_session(session_id: "before", updated_at_source: "2026-04-01T00:00:00Z")
+      create_copilot_session(session_id: "after", updated_at_source: "2026-05-01T00:00:00Z")
+
+      get "/api/sessions", params: { from: "2026-04-15" }
+      expect(JSON.parse(response.body, symbolize_names: true)[:data].map { |payload| payload[:id] }).to eq(%w[after])
+
+      get "/api/sessions", params: { to: "2026-04-15" }
+      expect(JSON.parse(response.body, symbolize_names: true)[:data].map { |payload| payload[:id] }).to eq(%w[before])
+    end
+
+    it "uses the latest 30 days as the default request range" do
+      travel_to Time.zone.parse("2026-05-03T12:00:00Z") do
+        create_copilot_session(session_id: "inside-default", updated_at_source: "2026-04-20T00:00:00Z")
+        create_copilot_session(session_id: "outside-default", updated_at_source: "2026-04-03T11:59:59Z")
 
         get "/api/sessions"
+      end
 
-        expect(response).to have_http_status(:service_unavailable)
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body, symbolize_names: true)[:data].map { |payload| payload[:id] }).to eq(%w[inside-default])
+    end
+
+    it "returns an empty success response when the read model has no sessions" do
+      get "/api/sessions", params: { from: "2026-04-01", to: "2026-04-30" }
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body, symbolize_names: true)).to eq(
+        data: [],
+        meta: {
+          count: 0,
+          partial_results: false
+        }
+      )
+    end
+
+    it "returns 400 error envelopes before running the query for invalid list params" do
+      [
+        [ { from: "not-a-date" }, { field: "from", reason: "invalid_datetime", value: "not-a-date" } ],
+        [ { to: "2026-02-30" }, { field: "to", reason: "invalid_datetime", value: "2026-02-30" } ],
+        [ { from: "2026-05-01", to: "2026-04-01" }, { field: "range", reason: "from_after_to" } ],
+        [ { limit: "0" }, { field: "limit", reason: "positive_integer_required", value: "0" } ]
+      ].each do |params, details|
+        expect(CopilotHistory::Api::SessionIndexQuery).not_to receive(:new)
+
+        get "/api/sessions", params: params
+
+        expect(response).to have_http_status(:bad_request)
         expect(JSON.parse(response.body, symbolize_names: true)).to eq(
           error: {
-            code: "root_missing",
-            message: "history root does not exist",
-            details: {
-              path: File.join(home, ".copilot")
-            }
+            code: "invalid_session_list_query",
+            message: "session list query is invalid",
+            details:
           }
         )
       end
@@ -192,399 +156,152 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
   end
 
   describe "GET /api/sessions/:id" do
-    it "returns header, message snapshots, and timeline in a single read-only response" do
-      with_copilot_history_fixture("mixed_root") do |root|
-        legacy_path = root.join("history-session-state/legacy-mixed.json")
-        legacy_payload = JSON.parse(legacy_path.read)
-        ENV["COPILOT_HOME"] = root.to_s
-        legacy_payload["timeline"] << {
-          "type" => "assistant_message",
-          "role" => "assistant",
-          "content" => "legacy partial event"
-        }
-        legacy_path.write(JSON.pretty_generate(legacy_payload))
+    it "returns current stored detail payloads without rereading raw files when include_raw is requested" do
+      detail_payload = {
+        "id" => "current-session",
+        "source_format" => "current",
+        "header" => {
+          "title" => "current detail",
+          "cwd" => "/work/current-session"
+        },
+        "message_snapshots" => [
+          {
+            "role" => "user",
+            "content" => "saved snapshot"
+          }
+        ],
+        "raw_included" => false,
+        "conversation" => {
+          "entries" => [
+            {
+              "sequence" => 1,
+              "role" => "user",
+              "content" => "saved detail"
+            }
+          ]
+        },
+        "activity" => [
+          {
+            "kind" => "tool_call",
+            "name" => "apply_patch"
+          }
+        ],
+        "degraded" => true,
+        "issues" => [
+          {
+            "code" => "partial"
+          }
+        ],
+        "timeline" => []
+      }
+      create_copilot_session(session_id: "current-session", detail_payload: detail_payload)
 
-        get "/api/sessions/legacy-mixed"
+      expect(CopilotHistory::SessionCatalogReader).not_to receive(:new)
 
-        expect(response).to have_http_status(:ok)
-        payload = JSON.parse(response.body, symbolize_names: true).fetch(:data)
-        expect(payload).to include(
-            id: "legacy-mixed",
-            source_format: "legacy",
-            created_at: "2026-04-26T07:50:00Z",
-            updated_at: nil,
-            work_context: {
-              cwd: nil,
-              git_root: nil,
-              repository: nil,
-              branch: nil
-            },
-            selected_model: "gpt-5.4",
-            source_state: "degraded",
-            degraded: true,
-            raw_included: false,
-            issues: [],
-            message_snapshots: [
-              {
-                role: "assistant",
-                content: "legacy mixed transcript",
-                raw_payload: nil
-              }
-            ],
-            conversation: {
-              entries: [
-                {
-                  sequence: 1,
-                  role: "assistant",
-                  content: "legacy mixed event",
-                  occurred_at: "2026-04-26T07:50:01Z",
-                  tool_calls: [],
-                  degraded: false,
-                  issues: []
-                },
-                {
-                  sequence: 2,
-                  role: "assistant",
-                  content: "legacy partial event",
-                  occurred_at: nil,
-                  tool_calls: [],
-                  degraded: true,
-                  issues: [
-                    {
-                      code: "event.partial_mapping",
-                      severity: "warning",
-                      message: "event payload matched partially",
-                      source_path: legacy_path.to_s,
-                      scope: "event",
-                      event_sequence: 2
-                    }
-                  ]
-                }
-              ],
-              message_count: 2,
-              empty_reason: nil,
-              summary: {
-                has_conversation: true,
-                message_count: 2,
-                preview: "legacy mixed event",
-                activity_count: 0
-              }
-            },
-            activity: {
-              entries: []
-            },
-            timeline: [
+      get "/api/sessions/current-session", params: { include_raw: "true" }
+
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body, symbolize_names: true)).to eq(
+        data: {
+          id: "current-session",
+          source_format: "current",
+          header: {
+            title: "current detail",
+            cwd: "/work/current-session"
+          },
+          message_snapshots: [
+            {
+              role: "user",
+              content: "saved snapshot"
+            }
+          ],
+          raw_included: false,
+          conversation: {
+            entries: [
               {
                 sequence: 1,
-                kind: "message",
-                mapping_status: "complete",
-                raw_type: "assistant_message",
-                occurred_at: "2026-04-26T07:50:01Z",
-                role: "assistant",
-                content: "legacy mixed event",
-                tool_calls: [],
-                detail: nil,
-                raw_payload: nil,
-                degraded: false,
-                issues: []
-              },
-              {
-                sequence: 2,
-                kind: "message",
-                mapping_status: "partial",
-                raw_type: "assistant_message",
-                occurred_at: nil,
-                role: "assistant",
-                content: "legacy partial event",
-                tool_calls: [],
-                detail: nil,
-                raw_payload: nil,
-                degraded: true,
-                issues: [
-                  {
-                    code: "event.partial_mapping",
-                    severity: "warning",
-                    message: "event payload matched partially",
-                    source_path: legacy_path.to_s,
-                    scope: "event",
-                    event_sequence: 2
-                  }
-                ]
+                role: "user",
+                content: "saved detail"
               }
             ]
-        )
-        expect(payload.keys).to contain_exactly(
-          :id,
-          :source_format,
-          :created_at,
-          :updated_at,
-          :work_context,
-          :selected_model,
-          :source_state,
-          :degraded,
-          :raw_included,
-          :issues,
-          :message_snapshots,
-          :conversation,
-          :activity,
-          :timeline
-        )
-      end
-    end
-
-    it "returns session_not_found as a 404 without conflating it with a root failure" do
-      with_copilot_history_fixture("mixed_root") do |root|
-        ENV["COPILOT_HOME"] = root.to_s
-
-        get "/api/sessions/missing-session"
-
-        expect(response).to have_http_status(:not_found)
-        expect(JSON.parse(response.body, symbolize_names: true)).to eq(
-          error: {
-            code: "session_not_found",
-            message: "session was not found",
-            details: {
-              session_id: "missing-session"
-            }
-          }
-        )
-      end
-    end
-
-    it "returns current dotted sessions with canonical helper fields in the shared detail response" do
-      with_copilot_history_fixture("current_schema_valid") do |root|
-        ENV["COPILOT_HOME"] = root.to_s
-
-        get "/api/sessions/current-schema-valid"
-
-        expect(response).to have_http_status(:ok)
-
-        payload = JSON.parse(response.body, symbolize_names: true).fetch(:data)
-        timeline = payload.fetch(:timeline)
-        assistant_message = timeline.find { |event| event.fetch(:sequence) == 4 }
-        empty_tool_request = timeline.find { |event| event.fetch(:sequence) == 5 }
-        detail_event = timeline.find { |event| event.fetch(:raw_type) == "tool.execution_start" }
-        expect(payload.fetch(:source_format)).to eq("current")
-        expect(payload.fetch(:message_snapshots)).to eq([])
-        expect(timeline.map { |event| [ event.fetch(:sequence), event.fetch(:kind), event.fetch(:mapping_status) ] }).to eq(
-          [
-            [ 1, "message", "complete" ],
-            [ 2, "message", "complete" ],
-            [ 3, "detail", "complete" ],
-            [ 4, "message", "complete" ],
-            [ 5, "message", "complete" ],
-            [ 6, "detail", "complete" ],
-            [ 7, "detail", "complete" ],
-            [ 8, "detail", "complete" ],
-            [ 9, "detail", "complete" ]
-          ]
-        )
-        expect(assistant_message).to include(
-          role: "assistant",
-          content: "I can inspect the latest sessions.",
-          tool_calls: [
+          },
+          activity: [
             {
-              name: "functions.bash",
-              arguments_preview: "{\"command\":\"git --no-pager status\",\"description\":\"Inspect repository status\"}",
-              is_truncated: false,
-              status: "complete"
+              kind: "tool_call",
+              name: "apply_patch"
             }
           ],
-          detail: nil
-        )
-        expect(empty_tool_request).to include(
-          role: "assistant",
-          content: nil,
-          tool_calls: [
-            {
-              name: "functions.bash",
-              arguments_preview: "{\"command\":\"pwd\"}",
-              is_truncated: false,
-              status: "complete"
-            }
-          ],
-          detail: nil
-        )
-        expect(detail_event).to include(
-          role: nil,
-          content: nil,
-          tool_calls: [],
-          detail: {
-            category: "tool_execution",
-            title: "tool.execution_start",
-            body: "functions.bash / tool-1"
-          }
-        )
-        expect(payload.fetch(:issues)).to eq([])
-      end
-    end
-
-    it "serves current model values and tool-only conversation entries from the shared current model fixture" do
-      with_copilot_history_fixture("current_model") do |root|
-        ENV["COPILOT_HOME"] = root.to_s
-
-        get "/api/sessions"
-
-        expect(response).to have_http_status(:ok)
-        index_sessions = JSON.parse(response.body, symbolize_names: true).fetch(:data)
-        expect(index_sessions.find { |session| session.fetch(:id) == "current-model-with-values" }.fetch(:selected_model)).to eq("gpt-5-current")
-        expect(index_sessions.find { |session| session.fetch(:id) == "current-model-without-values" }.fetch(:selected_model)).to be_nil
-
-        get "/api/sessions/current-model-with-values"
-
-        expect(response).to have_http_status(:ok)
-        payload = JSON.parse(response.body, symbolize_names: true).fetch(:data)
-        expect(payload.fetch(:selected_model)).to eq("gpt-5-current")
-
-        tool_only_entries = payload.fetch(:conversation).fetch(:entries).select do |entry|
-          entry.fetch(:content).to_s.empty? && entry.fetch(:tool_calls).any?
-        end
-        expect(tool_only_entries.map { |entry| [ entry.fetch(:role), entry.fetch(:tool_calls).first.fetch(:name) ] }).to eq(
-          [
-            [ "assistant", "skill-context" ],
-            [ "user", "functions.submit_feedback" ]
-          ]
-        )
-        expect(tool_only_entries.map { |entry| entry.fetch(:degraded) }).to eq([ false, false ])
-        expect(tool_only_entries.map { |entry| entry.fetch(:issues) }).to eq([ [], [] ])
-
-        get "/api/sessions/current-model-without-values"
-
-        expect(response).to have_http_status(:ok)
-        expect(JSON.parse(response.body, symbolize_names: true).fetch(:data).fetch(:selected_model)).to be_nil
-      end
-    end
-
-    it "only includes raw payloads when include_raw is exactly true" do
-      with_copilot_history_fixture("current_schema_valid") do |root|
-        ENV["COPILOT_HOME"] = root.to_s
-
-        get "/api/sessions/current-schema-valid", params: { include_raw: "false" }
-
-        expect(response).to have_http_status(:ok)
-        normal_payload = JSON.parse(response.body, symbolize_names: true).fetch(:data)
-        expect(normal_payload.fetch(:raw_included)).to eq(false)
-        expect(normal_payload.fetch(:timeline).map { |event| event.fetch(:raw_payload) }).to all(be_nil)
-        expect(normal_payload.dig(:activity, :entries).map { |entry| entry.fetch(:raw_payload) }).to all(be_nil)
-
-        get "/api/sessions/current-schema-valid", params: { include_raw: "true" }
-
-        expect(response).to have_http_status(:ok)
-        raw_payload = JSON.parse(response.body, symbolize_names: true).fetch(:data)
-        expect(raw_payload.fetch(:raw_included)).to eq(true)
-        expect(raw_payload.fetch(:timeline).map { |event| event.fetch(:raw_payload) }).to include(a_kind_of(Hash))
-        expect(raw_payload.dig(:activity, :entries).map { |entry| entry.fetch(:raw_payload) }).to include(a_kind_of(Hash))
-      end
-    end
-
-    it "keeps degraded current detail responses readable while surfacing partial, unknown, and invalid line issues" do
-      with_copilot_history_fixture("current_schema_degraded") do |root|
-        events_path = root.join("session-state/current-schema-degraded/events.jsonl")
-        ENV["COPILOT_HOME"] = root.to_s
-
-        get "/api/sessions/current-schema-degraded"
-
-        expect(response).to have_http_status(:ok)
-
-        payload = JSON.parse(response.body, symbolize_names: true).fetch(:data)
-        timeline = payload.fetch(:timeline)
-
-        expect(payload).to include(
-          id: "current-schema-degraded",
-          source_format: "current",
-          created_at: "2026-04-28T02:00:00Z",
-          updated_at: "2026-04-28T02:00:04Z",
           degraded: true,
-          message_snapshots: []
-        )
-        expect(payload.fetch(:issues)).to include(
-          {
-            code: "current.event_parse_failed",
-            severity: "error",
-            message: "events.jsonl line could not be parsed",
-            source_path: events_path.to_s,
-            scope: "event",
-            event_sequence: 5
-          }
-        )
-        expect(timeline.map { |event| [ event.fetch(:sequence), event.fetch(:kind), event.fetch(:mapping_status), event.fetch(:degraded) ] }).to eq(
-          [
-            [ 1, "message", "complete", false ],
-            [ 2, "message", "partial", true ],
-            [ 3, "detail", "complete", false ],
-            [ 4, "unknown", "complete", true ]
-          ]
-        )
-        expect(timeline.fetch(1)).to include(
-          role: "assistant",
-          content: "Starting diagnostics.",
-          tool_calls: [
+          issues: [
             {
-              name: nil,
-              arguments_preview: "{\"command\":\"printenv\",\"token\":\"[REDACTED]\"}",
-              is_truncated: false,
-              status: "partial"
+              code: "partial"
             }
           ],
-          detail: nil
-        )
-        expect(timeline.fetch(1).fetch(:issues)).to eq(
-          [
-            {
-              code: "event.partial_mapping",
-              severity: "warning",
-              message: "event payload matched partially",
-              source_path: events_path.to_s,
-              scope: "event",
-              event_sequence: 2
-            }
-          ]
-        )
-        expect(timeline.fetch(2)).to include(
-          detail: {
-            category: "hook",
-            title: "hook.start",
-            body: "before-tool / *"
-          }
-        )
-        expect(timeline.fetch(3)).to include(
-          raw_type: "mystery.event",
-          content: nil,
-          detail: nil
-        )
-        expect(timeline.fetch(3).fetch(:issues)).to eq(
-          [
-            {
-              code: "event.unknown_shape",
-              severity: "warning",
-              message: "event payload could not be mapped to canonical fields",
-              source_path: events_path.to_s,
-              scope: "event",
-              event_sequence: 4
-            }
-          ]
-        )
-      end
+          timeline: []
+        }
+      )
     end
 
-    it "reuses the shared root failure envelope for detail requests" do
-      Dir.mktmpdir("copilot-history-home") do |home|
-        ENV.delete("COPILOT_HOME")
-        ENV["HOME"] = home
+    it "returns legacy stored detail payloads through the same detail contract" do
+      detail_payload = {
+        "id" => "legacy-session",
+        "source_format" => "legacy",
+        "header" => { "title" => "legacy detail" },
+        "message_snapshots" => [],
+        "conversation" => { "entries" => [] },
+        "activity" => [],
+        "timeline" => [ { "kind" => "session_started" } ],
+        "degraded" => false,
+        "issues" => []
+      }
+      create_copilot_session(session_id: "legacy-session", source_format: "legacy", detail_payload: detail_payload)
 
-        get "/api/sessions/legacy-mixed"
+      get "/api/sessions/legacy-session"
 
-        expect(response).to have_http_status(:service_unavailable)
-        expect(JSON.parse(response.body, symbolize_names: true)).to eq(
-          error: {
-            code: "root_missing",
-            message: "history root does not exist",
-            details: {
-              path: File.join(home, ".copilot")
-            }
+      expect(response).to have_http_status(:ok)
+      expect(JSON.parse(response.body, symbolize_names: true)).to eq(
+        data: {
+          id: "legacy-session",
+          source_format: "legacy",
+          header: { title: "legacy detail" },
+          message_snapshots: [],
+          conversation: { entries: [] },
+          activity: [],
+          timeline: [ { kind: "session_started" } ],
+          degraded: false,
+          issues: []
+        }
+      )
+    end
+
+    it "returns session_not_found with the requested session id for missing read model rows" do
+      get "/api/sessions/missing-session"
+
+      expect(response).to have_http_status(:not_found)
+      expect(JSON.parse(response.body, symbolize_names: true)).to eq(
+        error: {
+          code: "session_not_found",
+          message: "session was not found",
+          details: {
+            session_id: "missing-session"
           }
-        )
-      end
+        }
+      )
+    end
+
+    it "returns session_not_found when the read model is empty" do
+      get "/api/sessions/missing-session"
+
+      expect(response).to have_http_status(:not_found)
+      expect(JSON.parse(response.body, symbolize_names: true)).to eq(
+        error: {
+          code: "session_not_found",
+          message: "session was not found",
+          details: {
+            session_id: "missing-session"
+          }
+        }
+      )
     end
   end
 
@@ -593,11 +310,42 @@ RSpec.describe "API Sessions", :copilot_history, type: :request do
       post "/api/sessions"
       expect(response).to have_http_status(:not_found)
 
-      patch "/api/sessions/legacy-mixed"
+      patch "/api/sessions/current-session"
       expect(response).to have_http_status(:not_found)
 
-      delete "/api/sessions/legacy-mixed"
+      delete "/api/sessions/current-session"
       expect(response).to have_http_status(:not_found)
     end
+  end
+
+  def create_copilot_session(session_id:, source_format: "current", created_at_source: nil, updated_at_source: nil, summary_payload: nil, detail_payload: nil, no_display_time: false)
+    CopilotSession.create!(
+      session_id: session_id,
+      source_format: source_format,
+      source_state: "complete",
+      created_at_source: no_display_time ? nil : parse_time(created_at_source),
+      updated_at_source: no_display_time ? nil : parse_time(updated_at_source || created_at_source || "2026-04-26T10:00:00Z"),
+      cwd: "/work/#{session_id}",
+      git_root: "/work/#{session_id}",
+      repository: "example/repo",
+      branch: "main",
+      selected_model: "gpt-5",
+      event_count: 1,
+      message_snapshot_count: 1,
+      issue_count: 0,
+      degraded: false,
+      conversation_preview: "summary",
+      message_count: 1,
+      activity_count: 1,
+      source_paths: { "source" => "/tmp/#{session_id}.json" },
+      source_fingerprint: { "complete" => true },
+      summary_payload: summary_payload || { "id" => session_id, "degraded" => false, "issues" => [] },
+      detail_payload: detail_payload || { "id" => session_id, "conversation" => {}, "timeline" => [] },
+      indexed_at: Time.zone.parse("2026-04-30T00:00:00Z")
+    )
+  end
+
+  def parse_time(value)
+    value && Time.zone.parse(value)
   end
 end

@@ -8,31 +8,29 @@ RSpec.describe CopilotHistory::Api::Types::SessionLookupResult do
   end
 
   describe described_class::Found do
-    it "wraps resolved root and normalized session in the public found envelope" do
-      root = CopilotHistory::Types::ResolvedHistoryRoot.new(
-        root_path: "/tmp/copilot",
-        current_root: "/tmp/copilot/session-state",
-        legacy_root: "/tmp/copilot/history-session-state"
-      )
-      session = CopilotHistory::Types::NormalizedSession.new(
-        session_id: "session-123",
-        source_format: :current,
-        created_at: "2026-04-26T10:00:00Z",
-        updated_at: "2026-04-26T10:05:00Z",
-        selected_model: "gpt-5.4",
-        events: [],
-        message_snapshots: [],
-        issues: [],
-        source_paths: {
-          workspace: "/tmp/copilot/session-state/session-123/workspace.yaml",
-          events: "/tmp/copilot/session-state/session-123/events.jsonl"
-        }
-      )
+    it "carries the stored detail payload without raw reader state" do
+      detail_payload = {
+        id: "session-123",
+        source_format: "current",
+        timeline: [],
+        raw_included: false
+      }
 
-      result = described_class.new(root:, session:)
+      result = described_class.new(detail_payload:)
 
-      expect(described_class.members).to eq(%i[root session])
-      expect(result.root).to eq(root)
+      expect(described_class.members).to eq([ :detail_payload ])
+      expect(result.detail_payload).to eq(detail_payload)
+      expect(result).not_to respond_to(:root)
+      expect(result).not_to respond_to(:session)
+    end
+
+    it "exposes legacy presenter state only when explicitly provided" do
+      session = instance_double("NormalizedSession")
+      result = described_class.new(root: nil, session:)
+
+      expect(result).to respond_to(:root)
+      expect(result).to respond_to(:session)
+      expect(result.root).to be_nil
       expect(result.session).to eq(session)
     end
   end

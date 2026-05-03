@@ -1,114 +1,110 @@
 require "rails_helper"
 
 RSpec.describe CopilotHistory::Api::SessionDetailQuery do
-  subject(:query) { described_class.new(session_catalog_reader: session_catalog_reader) }
-
-  let(:session_catalog_reader) { instance_double(CopilotHistory::SessionCatalogReader) }
-  let(:root) do
-    CopilotHistory::Types::ResolvedHistoryRoot.new(
-      root_path: "/tmp/copilot",
-      current_root: "/tmp/copilot/session-state",
-      legacy_root: "/tmp/copilot/history-session-state"
-    )
-  end
+  subject(:query) { described_class.new }
 
   describe "#call" do
-    it "returns a found result for an exact session_id match without adding HTTP concerns" do
-      matched_session = build_session(session_id: "session-123", source_format: :current)
-      success_result = CopilotHistory::Types::ReadResult::Success.new(
-        root: root,
-        sessions: [
-          build_session(session_id: "session-12", source_format: :legacy),
-          matched_session
-        ]
+    it "returns the stored detail payload for an exact session_id match without reconstructing fields" do
+      create_session(
+        session_id: "session-12",
+        source_format: "legacy",
+        detail_payload: {
+          "id" => "session-12",
+          "source_format" => "legacy",
+          "header" => { "title" => "wrong session" },
+          "conversation" => []
+        }
       )
-
-      expect(session_catalog_reader).to receive(:call).once.and_return(success_result)
+      detail_payload = {
+        "id" => "session-123",
+        "source_format" => "current",
+        "header" => { "title" => "saved detail" },
+        "message_snapshots" => [ { "role" => "user", "content" => "hello" } ],
+        "conversation" => [ { "type" => "message", "text" => "hello" } ],
+        "activity" => [ { "kind" => "tool_call" } ],
+        "timeline" => [ { "kind" => "message" } ],
+        "degraded" => false,
+        "issues" => []
+      }
+      create_session(session_id: "session-123", source_format: "current", detail_payload: detail_payload)
 
       result = query.call(session_id: "session-123")
 
       expect(result).to eq(
-        CopilotHistory::Api::Types::SessionLookupResult::Found.new(
-          root: root,
-          session: matched_session
-        )
+        CopilotHistory::Api::Types::SessionLookupResult::Found.new(detail_payload: detail_payload)
       )
+      expect(result.detail_payload).to eq(detail_payload)
       expect(result).not_to respond_to(:status)
     end
 
-    it "returns not_found when the readable root does not include the requested session id" do
-      success_result = CopilotHistory::Types::ReadResult::Success.new(
-        root: root,
-        sessions: [ build_session(session_id: "session-123", source_format: :current) ]
-      )
+    it "returns legacy detail payloads through the same found result contract" do
+      detail_payload = {
+        "id" => "legacy-session",
+        "source_format" => "legacy",
+        "header" => { "title" => "legacy detail" },
+        "conversation" => [],
+        "activity" => [],
+        "timeline" => [],
+        "degraded" => true,
+        "issues" => [ { "code" => "legacy_issue" } ]
+      }
+      create_session(session_id: "legacy-session", source_format: "legacy", detail_payload: detail_payload)
 
-      expect(session_catalog_reader).to receive(:call).once.and_return(success_result)
+      expect(query.call(session_id: "legacy-session")).to eq(
+        CopilotHistory::Api::Types::SessionLookupResult::Found.new(detail_payload: detail_payload)
+      )
+    end
+
+    it "returns not_found when the stored read model does not include the requested session id" do
+      create_session(session_id: "session-123", source_format: "current")
 
       expect(query.call(session_id: "missing-session")).to eq(
         CopilotHistory::Api::Types::SessionLookupResult::NotFound.new(session_id: "missing-session")
       )
     end
 
-    it "returns root failures from the reader unchanged" do
-      failure_result = CopilotHistory::Types::ReadResult::Failure.new(
-        failure: CopilotHistory::Types::ReadFailure.new(
-          code: CopilotHistory::Errors::ReadErrorCode::ROOT_PERMISSION_DENIED,
-          path: "/tmp/copilot",
-          message: "history root is not accessible"
-        )
+    it "returns not_found when the read model is empty" do
+      expect(query.call(session_id: "missing-session")).to eq(
+        CopilotHistory::Api::Types::SessionLookupResult::NotFound.new(session_id: "missing-session")
       )
-
-      expect(session_catalog_reader).to receive(:call).once.and_return(failure_result)
-
-      expect(query.call(session_id: "session-123")).to eq(failure_result)
     end
 
-    it "returns degraded current sessions through the shared found result without special casing partial success" do
-      degraded_current_session = build_session(
-        session_id: "current-schema-degraded",
-        source_format: :current,
-        issues: [
-          CopilotHistory::Types::ReadIssue.new(
-            code: CopilotHistory::Errors::ReadErrorCode::EVENT_PARTIAL_MAPPING,
-            message: "event payload matched partially",
-            source_path: "/tmp/copilot/session-state/current-schema-degraded/events.jsonl",
-            sequence: 2,
-            severity: :warning
-          )
-        ]
-      )
-      success_result = CopilotHistory::Types::ReadResult::Success.new(
-        root: root,
-        sessions: [
-          build_session(session_id: "legacy-session", source_format: :legacy),
-          degraded_current_session
-        ]
-      )
+    it "does not call the raw session catalog reader when detail is requested" do
+      detail_payload = { "id" => "session-123", "conversation" => [] }
+      create_session(session_id: "session-123", detail_payload: detail_payload)
 
-      expect(session_catalog_reader).to receive(:call).once.and_return(success_result)
+      expect(CopilotHistory::SessionCatalogReader).not_to receive(:new)
 
-      expect(query.call(session_id: "current-schema-degraded")).to eq(
-        CopilotHistory::Api::Types::SessionLookupResult::Found.new(
-          root: root,
-          session: degraded_current_session
-        )
-      )
+      result = query.call(session_id: "session-123")
+
+      expect(result.detail_payload).to eq(detail_payload)
     end
   end
 
-  def build_session(session_id:, source_format:, issues: [])
-    CopilotHistory::Types::NormalizedSession.new(
+  def create_session(session_id:, source_format: "current", detail_payload: nil)
+    CopilotSession.create!(
       session_id: session_id,
       source_format: source_format,
-      created_at: "2026-04-26T10:00:00Z",
-      updated_at: "2026-04-26T10:05:00Z",
-      selected_model: nil,
-      events: [],
-      message_snapshots: [],
-      issues: issues,
-      source_paths: {
-        source: "/tmp/copilot/#{session_id}.json"
-      }
+      source_state: "complete",
+      created_at_source: Time.zone.parse("2026-04-26T10:00:00Z"),
+      updated_at_source: Time.zone.parse("2026-04-26T10:05:00Z"),
+      cwd: "/work/#{session_id}",
+      git_root: "/work/#{session_id}",
+      repository: "example/repo",
+      branch: "main",
+      selected_model: "gpt-5",
+      event_count: 1,
+      message_snapshot_count: 1,
+      issue_count: 0,
+      degraded: false,
+      conversation_preview: "summary",
+      message_count: 1,
+      activity_count: 1,
+      source_paths: { "source" => "/tmp/#{session_id}.json" },
+      source_fingerprint: { "complete" => true },
+      summary_payload: { "id" => session_id, "degraded" => false },
+      detail_payload: detail_payload || { "id" => session_id, "conversation" => [] },
+      indexed_at: Time.zone.parse("2026-04-30T00:00:00Z")
     )
   end
 end

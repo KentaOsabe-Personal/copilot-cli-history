@@ -46,4 +46,31 @@ RSpec.describe CopilotHistory::Api::Presenters::ErrorPresenter do
       )
     end
   end
+
+  describe "#from_invalid_session_list_query" do
+    it "maps invalid list query results to a 400 invalid_session_list_query envelope" do
+      invalid_result = CopilotHistory::Api::Types::SessionIndexResult::Invalid.new(
+        code: "invalid_session_list_query",
+        message: "session list query is invalid",
+        details: {
+          field: "from",
+          reason: "invalid_datetime"
+        }
+      )
+
+      status, payload = described_class.new.from_invalid_session_list_query(invalid_result:)
+
+      expect(status).to eq(:bad_request)
+      expect(payload).to eq(
+        error: {
+          code: "invalid_session_list_query",
+          message: "session list query is invalid",
+          details: {
+            field: "from",
+            reason: "invalid_datetime"
+          }
+        }
+      )
+    end
+  end
 end

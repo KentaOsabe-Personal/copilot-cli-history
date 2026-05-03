@@ -13,6 +13,17 @@ module CopilotHistory
           [ :not_found, error_payload(code: SESSION_NOT_FOUND_CODE, message: SESSION_NOT_FOUND_MESSAGE, details: { session_id: }) ]
         end
 
+        def from_invalid_session_list_query(invalid_result:)
+          [
+            :bad_request,
+            error_payload(
+              code: invalid_result.code,
+              message: invalid_result.message,
+              details: invalid_result.details
+            )
+          ]
+        end
+
         private
 
         def error_payload(code:, message:, details:)

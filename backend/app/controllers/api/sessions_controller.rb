@@ -1,13 +1,20 @@
 module Api
   class SessionsController < ApplicationController
     def index
-      result = session_index_query.call
+      criteria = session_list_params.call(params:)
+      if criteria.is_a?(CopilotHistory::Api::Types::SessionIndexResult::Invalid)
+        return render_error(*error_presenter.from_invalid_session_list_query(invalid_result: criteria))
+      end
+
+      result = session_index_query.call(
+        from_time: criteria.from_time,
+        to_time: criteria.to_time,
+        limit: criteria.limit
+      )
 
       case result
-      when CopilotHistory::Types::ReadResult::Success
-        render json: session_index_presenter.call(result: result), status: :ok
-      when CopilotHistory::Types::ReadResult::Failure
-        render_error(*error_presenter.from_read_failure(failure: result.failure))
+      when CopilotHistory::Api::Types::SessionIndexResult::Success
+        render json: { data: result.data, meta: result.meta }, status: :ok
       else
         raise ArgumentError, "unexpected session index result: #{result.class}"
       end
@@ -18,11 +25,9 @@ module Api
 
       case result
       when CopilotHistory::Api::Types::SessionLookupResult::Found
-        render json: session_detail_presenter.call(result: result, include_raw: include_raw?), status: :ok
+        render json: { data: result.detail_payload }, status: :ok
       when CopilotHistory::Api::Types::SessionLookupResult::NotFound
         render_error(*error_presenter.from_not_found(session_id: result.session_id))
-      when CopilotHistory::Types::ReadResult::Failure
-        render_error(*error_presenter.from_read_failure(failure: result.failure))
       else
         raise ArgumentError, "unexpected session detail result: #{result.class}"
       end
@@ -42,20 +47,12 @@ module Api
       @session_detail_query ||= CopilotHistory::Api::SessionDetailQuery.new
     end
 
-    def session_index_presenter
-      @session_index_presenter ||= CopilotHistory::Api::Presenters::SessionIndexPresenter.new
-    end
-
-    def session_detail_presenter
-      @session_detail_presenter ||= CopilotHistory::Api::Presenters::SessionDetailPresenter.new
+    def session_list_params
+      @session_list_params ||= CopilotHistory::Api::SessionListParams.new
     end
 
     def error_presenter
       @error_presenter ||= CopilotHistory::Api::Presenters::ErrorPresenter.new
-    end
-
-    def include_raw?
-      params[:include_raw] == "true"
     end
   end
 end
