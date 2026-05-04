@@ -92,14 +92,14 @@
   - _Requirements: 5.2, 5.3, 5.5_
   - _Boundary: AppShell_
 
-- [ ] 5. 回帰防止の検証を仕上げる
-- [ ] 5.1 一覧導線の統合テストで日付フィルタ体験と read-only スコープを固定する
+- [x] 5. 回帰防止の検証を仕上げる
+- [x] 5.1 一覧導線の統合テストで日付フィルタ体験と read-only スコープを固定する
   - 日付条件の適用、same-range refresh、sync 後の条件維持、scope copy が同時に崩れないことを確認できる。
   - current / legacy の混在データでも同じ filter experience が保たれることを確認できる。
   - feature 全体で read-only の探索体験を維持できる自動テストが揃う。
   - _Depends: 4.2, 4.3_
   - _Requirements: 2.2, 2.5, 5.2, 5.3, 5.4, 5.5_
-- [ ] 5.2 一覧・詳細の overflow-sensitive surface で横スクロール回帰を防ぐ
+- [x] 5.2 一覧・詳細の overflow-sensitive surface で横スクロール回帰を防ぐ
   - 一覧カード、詳細ヘッダー、route 上部、タイムライン、raw payload、issue 表示で page 全体の横スクロールを前提にしないことを確認できる。
   - created-only session でも一覧表示時刻が filter basis と同じ優先順で出ることを確認できる。
   - 長い値がない通常ケースの可読性を落とさない回帰テストが揃う。
