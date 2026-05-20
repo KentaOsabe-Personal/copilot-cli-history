@@ -25,6 +25,7 @@ describe('SessionSummaryCard', () => {
     expect(screen.getByText('Review the session UI fixtures')).toBeInTheDocument()
     expect(screen.getByText('2 件の会話')).toBeInTheDocument()
     expect(screen.getByText('octo/copilot-cli-history @ main')).toBeInTheDocument()
+    expect(screen.getByText('/workspace/copilot-cli-history')).toBeInTheDocument()
     expect(screen.getByText('gpt-5-current')).toBeInTheDocument()
     expect(screen.queryByText('会話あり')).not.toBeInTheDocument()
     expect(screen.queryByText('正常')).not.toBeInTheDocument()
@@ -133,6 +134,7 @@ describe('SessionSummaryCard', () => {
 
     expect(screen.getByText('2026-04-26 18:00:00 JST')).toBeInTheDocument()
     expect(screen.getByText('表示日時')).toBeInTheDocument()
+    expect(screen.getByText('実行ディレクトリ')).toBeInTheDocument()
     expect(
       screen.getByText(
         'session-with-an-extremely-long-identifier-that-should-break-without-expanding-the-page-width',
@@ -148,5 +150,11 @@ describe('SessionSummaryCard', () => {
         'octo/copilot-cli-history-with-a-very-long-repository-name-that-needs-to-wrap @ feature/overflow-safe-rendering-for-session-summary-cards-with-long-identifiers',
       ),
     ).toHaveClass('break-words')
+    expect(
+      screen.getByText(
+        '/workspace/very-long-path-segment/that/keeps/going/without/natural/breakpoints',
+      ),
+    ).toHaveClass('break-words')
+    expect(screen.getByRole('link', { name: /を開く/u })).toBeInTheDocument()
   })
 })

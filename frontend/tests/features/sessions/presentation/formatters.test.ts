@@ -131,6 +131,72 @@ describe('formatters', () => {
   })
 
   /**
+   * 概要・目的: summary metadata で実行ディレクトリを repository / branch と独立して表示できることを検証する。
+   * テストケース: cwd、repository、branch が同時に存在する summary metadata を構築する。
+   * 期待値: 作業コンテキストと実行ディレクトリの両方が metadata item として返ること。
+   */
+  it('builds summary metadata with execution directory alongside repository and branch', () => {
+    expect(
+      buildSessionMetadataItems({
+        surface: 'summary',
+        createdAt: '2026-04-26T09:00:00Z',
+        updatedAt: '2026-04-26T09:05:00Z',
+        workContext: {
+          cwd: '  /workspace/copilot-cli-history/frontend  ',
+          git_root: '/workspace/copilot-cli-history',
+          repository: 'octo/copilot-cli-history',
+          branch: 'main',
+        },
+        selectedModel: null,
+      }),
+    ).toEqual([
+      {
+        label: '表示日時',
+        value: '2026-04-26 18:05:00 JST',
+      },
+      {
+        label: '作業コンテキスト',
+        value: 'octo/copilot-cli-history @ main',
+      },
+      {
+        label: '実行ディレクトリ',
+        value: '/workspace/copilot-cli-history/frontend',
+      },
+    ])
+  })
+
+  /**
+   * 概要・目的: summary metadata で cwd 欠損時に空項目や placeholder を表示しないことを検証する。
+   * テストケース: cwd が null または空白で、repository / branch が存在する summary metadata を構築する。
+   * 期待値: 実行ディレクトリ item は返らず、作業コンテキストだけが維持されること。
+   */
+  it('omits execution directory metadata when cwd is missing or blank', () => {
+    expect(
+      buildSessionMetadataItems({
+        surface: 'summary',
+        createdAt: '2026-04-26T09:00:00Z',
+        updatedAt: null,
+        workContext: {
+          cwd: '   ',
+          git_root: '/workspace/copilot-cli-history',
+          repository: 'octo/copilot-cli-history',
+          branch: 'main',
+        },
+        selectedModel: null,
+      }),
+    ).toEqual([
+      {
+        label: '表示日時',
+        value: '2026-04-26 18:00:00 JST',
+      },
+      {
+        label: '作業コンテキスト',
+        value: 'octo/copilot-cli-history @ main',
+      },
+    ])
+  })
+
+  /**
    * 概要・目的: 「keeps detail metadata honest when only created_at is available」を通じて、正規化・projection・presenter
    *   の変換契約を検証する。
    * テストケース: 「keeps detail metadata honest when only created_at is available」の条件・入力・操作を実行する。

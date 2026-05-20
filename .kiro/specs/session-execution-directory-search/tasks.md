@@ -45,8 +45,8 @@
   - _Requirements: 3.1, 3.4, 3.5, 4.5_
   - _Boundary: SessionsController, SessionIndexQuery_
 
-- [ ] 3. 一覧カードに cwd を表示する
-- [ ] 3.1 (P) summary metadata に「実行ディレクトリ」を追加する
+- [x] 3. 一覧カードに cwd を表示する
+- [x] 3.1 (P) summary metadata に「実行ディレクトリ」を追加する
   - frontend の summary DTO で cwd を受け取れることを確認し、不足があれば既存 response shape に合わせて補う。
   - cwd がある session では、metadata に「実行ディレクトリ」として cwd を追加する。
   - repository や branch があっても、cwd の表示項目を隠さない。
@@ -55,7 +55,7 @@
   - _Requirements: 2.1, 2.2, 2.3, 4.4_
   - _Boundary: sessionApi.types, metadata display helpers_
 
-- [ ] 3.2 長い cwd でも一覧カードの表示を崩さない
+- [x] 3.2 長い cwd でも一覧カードの表示を崩さない
   - 一覧カードで cwd と repository / branch を同時に読めるようにする。
   - 長い path はカード幅を広げず、折り返して読めるようにする。
   - 既存の preview、表示日時、例外 signal、詳細リンクは維持する。
