@@ -116,7 +116,7 @@ module CopilotHistory
             CopilotSession.create!(record_attributes(session:, fingerprint:))
             counts[:inserted_count] += 1
             counts[:saved_count] += 1
-          elsif existing.source_fingerprint == fingerprint && search_projection_created?(existing)
+          elsif existing.source_fingerprint == fingerprint && search_projection_created?(existing) && cwd_metadata_current?(existing, session)
             counts[:skipped_count] += 1
           else
             existing.update!(record_attributes(session:, fingerprint:))
@@ -134,6 +134,25 @@ module CopilotHistory
 
       def search_projection_created?(record)
         record.search_text_version == CopilotHistory::Persistence::SessionSearchTextBuilder::VERSION
+      end
+
+      def cwd_metadata_current?(record, session)
+        expected_cwd = path_or_nil(session.cwd)
+
+        record.cwd == expected_cwd && summary_work_context_cwd(record.summary_payload) == expected_cwd
+      end
+
+      def summary_work_context_cwd(summary_payload)
+        return nil unless summary_payload.is_a?(Hash)
+
+        work_context = summary_payload["work_context"] || summary_payload[:work_context]
+        return nil unless work_context.is_a?(Hash)
+
+        work_context["cwd"] || work_context[:cwd]
+      end
+
+      def path_or_nil(value)
+        value&.to_s
       end
 
       def handle_persistence_failure(sync_run:, error:)

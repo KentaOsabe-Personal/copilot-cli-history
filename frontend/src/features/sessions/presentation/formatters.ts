@@ -45,7 +45,7 @@ export function formatTimestamp(value: string | null): string {
 }
 
 export interface MetadataDisplayItem {
-  label: '表示日時' | '更新日時' | '作成日時' | '作業コンテキスト' | 'モデル'
+  label: '表示日時' | '更新日時' | '作成日時' | '作業コンテキスト' | '実行ディレクトリ' | 'モデル'
   value: string
 }
 
@@ -81,13 +81,22 @@ export function buildSessionMetadataItems(input: {
   const items: MetadataDisplayItem[] = [
     buildTimestampMetadataItem(input.surface ?? 'detail', input.createdAt, input.updatedAt),
   ]
+  const surface = input.surface ?? 'detail'
   const workContext = getDisplayableWorkContext(input.workContext)
+  const executionDirectory = normalizeText(input.workContext.cwd)
   const model = getDisplayableModel(input.selectedModel)
 
   if (workContext != null) {
     items.push({
       label: '作業コンテキスト',
       value: workContext,
+    })
+  }
+
+  if (surface === 'summary' && executionDirectory != null) {
+    items.push({
+      label: '実行ディレクトリ',
+      value: executionDirectory,
     })
   }
 

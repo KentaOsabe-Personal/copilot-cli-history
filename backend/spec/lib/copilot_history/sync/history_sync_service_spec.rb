@@ -201,6 +201,58 @@ RSpec.describe CopilotHistory::Sync::HistorySyncService do
     )
   end
 
+  # 概要・目的: raw current session の cwd が保存済み row に欠落している場合、fingerprint が同じでも再生成する契約を検証する。
+  # テストケース: 同じ source fingerprint の既存 row が `cwd` と `summary_payload.work_context.cwd` を欠いた状態で同期する。
+  # 期待値: skip せず更新し、DB scalar と summary payload の cwd が raw current session の cwd に揃うこと。
+  it "updates matching-fingerprint sessions when persisted cwd metadata is missing" do
+    session = build_session(session_id: "missing-cwd-metadata-session", cwd: "/workspace/current-project")
+    old_indexed_at = Time.zone.parse("2026-04-29 09:00:00")
+    fingerprint = fingerprint_for("same")
+    create_session(
+      session_id: "missing-cwd-metadata-session",
+      source_fingerprint: fingerprint,
+      indexed_at: old_indexed_at,
+      cwd: nil,
+      summary_payload: {
+        id: "missing-cwd-metadata-session",
+        work_context: { cwd: nil }
+      }
+    )
+    allow(reader).to receive(:call).and_return(success_result(session))
+    allow(fingerprint_builder).to receive(:call).with(source_paths: session.source_paths).and_return(fingerprint)
+    allow(record_builder).to receive(:call)
+      .with(session:, indexed_at: now, source_fingerprint: fingerprint)
+      .and_return(
+        attributes_for(
+          session,
+          fingerprint,
+          conversation_preview: "updated cwd metadata",
+          cwd: "/workspace/current-project",
+          summary_payload: {
+            id: "missing-cwd-metadata-session",
+            work_context: { cwd: "/workspace/current-project" }
+          }
+        )
+      )
+
+    result = service.call
+
+    expect(result).to be_succeeded
+    expect(CopilotSession.find_by!(session_id: "missing-cwd-metadata-session")).to have_attributes(
+      cwd: "/workspace/current-project",
+      indexed_at: now,
+      conversation_preview: "updated cwd metadata"
+    )
+    expect(CopilotSession.find_by!(session_id: "missing-cwd-metadata-session").summary_payload).to include(
+      "work_context" => include("cwd" => "/workspace/current-project")
+    )
+    expect(result.sync_run).to have_attributes(
+      updated_count: 1,
+      saved_count: 1,
+      skipped_count: 0
+    )
+  end
+
   # 概要・目的: 「does not modify raw source files or delete sessions missing from the latest read
   #   result」を通じて、reader と fixture の読取・劣化時の扱いを検証する。
   # テストケース: 「does not modify raw source files or delete sessions missing from the latest read
@@ -374,12 +426,14 @@ RSpec.describe CopilotHistory::Sync::HistorySyncService do
     session_id:,
     source_state: :complete,
     issues: [],
+    cwd: nil,
     source_paths: { events: Pathname.new("/tmp/#{session_id}/events.jsonl") }
   )
     CopilotHistory::Types::NormalizedSession.new(
       session_id:,
       source_format: :current,
       source_state:,
+      cwd:,
       created_at: "2026-04-29T00:00:00Z",
       updated_at: "2026-04-29T00:05:00Z",
       events: [],
@@ -408,7 +462,9 @@ RSpec.describe CopilotHistory::Sync::HistorySyncService do
     source_fingerprint:,
     indexed_at:,
     search_text: "search text #{session_id}",
-    search_text_version: CopilotHistory::Persistence::SessionSearchTextBuilder::VERSION
+    search_text_version: CopilotHistory::Persistence::SessionSearchTextBuilder::VERSION,
+    cwd: nil,
+    summary_payload: { id: session_id }
   )
     CopilotSession.create!(
       attributes_for(
@@ -417,7 +473,9 @@ RSpec.describe CopilotHistory::Sync::HistorySyncService do
         indexed_at:,
         conversation_preview: "existing #{session_id}",
         search_text:,
-        search_text_version:
+        search_text_version:,
+        cwd:,
+        summary_payload:
       )
     )
   end
@@ -431,7 +489,9 @@ RSpec.describe CopilotHistory::Sync::HistorySyncService do
     source_state: session.source_state.to_s,
     degraded: session.issues.any?,
     issue_count: session.issues.length,
-    search_text_version: CopilotHistory::Persistence::SessionSearchTextBuilder::VERSION
+    search_text_version: CopilotHistory::Persistence::SessionSearchTextBuilder::VERSION,
+    cwd: session.cwd&.to_s,
+    summary_payload: { id: session.session_id }
   )
     {
       session_id: session.session_id,
@@ -439,6 +499,7 @@ RSpec.describe CopilotHistory::Sync::HistorySyncService do
       source_state: source_state,
       created_at_source: session.created_at,
       updated_at_source: session.updated_at,
+      cwd: cwd,
       event_count: 0,
       message_snapshot_count: 0,
       issue_count: issue_count,
@@ -450,7 +511,7 @@ RSpec.describe CopilotHistory::Sync::HistorySyncService do
       activity_count: 0,
       source_paths: { "events" => session.source_paths.fetch(:events).to_s },
       source_fingerprint: source_fingerprint,
-      summary_payload: { id: session.session_id },
+      summary_payload: summary_payload,
       detail_payload: { id: session.session_id },
       indexed_at: indexed_at
     }
