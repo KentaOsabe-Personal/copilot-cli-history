@@ -152,6 +152,77 @@ RSpec.describe CopilotHistory::Persistence::SessionRecordBuilder do
       expect(CopilotSession.new(attributes)).to be_valid
     end
 
+    # 概要・目的: current session の cwd を DB scalar と一覧 payload の同一 metadata として保存する契約を検証する。
+    # テストケース: cwd を持つ current session を保存属性へ変換する。
+    # 期待値: `cwd` column と `summary_payload.work_context.cwd` に同じ cwd が入り、検索本文には混ざらないこと。
+    it "stores current cwd in the scalar column and summary work context without adding it to search text" do
+      events_path = write_source("current/events.jsonl", "{}\n")
+      workspace_path = write_source("current/workspace.yaml", "cwd: /workspace/cwd-project\n")
+      session = build_session(
+        session_id: "cwd-current-session",
+        source_format: :current,
+        cwd: "/workspace/cwd-project",
+        git_root: "/workspace/cwd-project",
+        repository: "octo/cwd-project",
+        branch: "feature/cwd",
+        source_paths: {
+          workspace: workspace_path,
+          events: events_path
+        },
+        events: [
+          build_event(
+            sequence: 1,
+            raw_type: "user.message",
+            occurred_at: "2026-04-28T01:00:00Z",
+            role: "user",
+            content: "find the project session"
+          )
+        ]
+      )
+
+      attributes = described_class.new.call(session:, indexed_at: Time.zone.parse("2026-04-30 12:00:00"))
+
+      expect(attributes.fetch(:cwd)).to eq("/workspace/cwd-project")
+      expect(attributes.fetch(:summary_payload).fetch(:work_context)).to include(
+        cwd: "/workspace/cwd-project",
+        git_root: "/workspace/cwd-project",
+        repository: "octo/cwd-project",
+        branch: "feature/cwd"
+      )
+      expect(attributes.fetch(:search_text)).to include("find the project session")
+      expect(attributes.fetch(:search_text)).not_to include(
+        "/workspace/cwd-project",
+        "octo/cwd-project",
+        "feature/cwd"
+      )
+    end
+
+    # 概要・目的: raw に cwd がない session へ git root や repository 由来の推測値を保存しない契約を検証する。
+    # テストケース: cwd は nil だが git_root / repository / branch を持つ session を保存属性へ変換する。
+    # 期待値: `cwd` column と `summary_payload.work_context.cwd` は nil のまま保たれること。
+    it "does not infer cwd from git root or repository metadata when cwd is missing" do
+      source_path = write_source("current/events.jsonl", "{}\n")
+      session = build_session(
+        session_id: "missing-cwd-current-session",
+        source_format: :current,
+        cwd: nil,
+        git_root: "/workspace/git-root-only",
+        repository: "octo/git-root-only",
+        branch: "main",
+        source_paths: { events: source_path }
+      )
+
+      attributes = described_class.new.call(session:, indexed_at: Time.zone.parse("2026-04-30 12:00:00"))
+
+      expect(attributes.fetch(:cwd)).to be_nil
+      expect(attributes.fetch(:summary_payload).fetch(:work_context)).to include(
+        cwd: nil,
+        git_root: "/workspace/git-root-only",
+        repository: "octo/git-root-only",
+        branch: "main"
+      )
+    end
+
     # 概要・目的: 「builds search text from presenter conversation payloads without tool or scalar metadata
     #   noise」を通じて、正規化・projection・presenter の変換契約を検証する。
     # テストケース: 「builds search text from presenter conversation payloads without tool or scalar metadata
