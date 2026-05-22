@@ -99,16 +99,17 @@ module CopilotHistory
       end
 
       def persist_sessions(sessions)
+        persistable_sessions = sessions.reject { |session| workspace_only_session?(session) }
         counts = {
           processed_count: sessions.length,
           inserted_count: 0,
           updated_count: 0,
           saved_count: 0,
           skipped_count: 0,
-          degraded_count: sessions.count { |session| degraded_session?(session) }
+          degraded_count: persistable_sessions.count { |session| degraded_session?(session) }
         }
 
-        sessions.each do |session|
+        persistable_sessions.each do |session|
           fingerprint = fingerprint_builder.call(source_paths: session.source_paths)
           existing = CopilotSession.find_by(session_id: session.session_id)
 
@@ -180,6 +181,10 @@ module CopilotHistory
 
       def degraded_session?(session)
         session.source_state.to_s == "degraded" || session.issues.any?
+      end
+
+      def workspace_only_session?(session)
+        session.source_state.to_s == "workspace_only"
       end
 
       def current_time
