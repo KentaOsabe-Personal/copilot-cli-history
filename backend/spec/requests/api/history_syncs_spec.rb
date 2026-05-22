@@ -60,6 +60,30 @@ RSpec.describe "API History Syncs", :copilot_history, type: :request do
       end
     end
 
+    # 概要・目的: 会話履歴を持たない workspace-only current session を明示同期で read model に保存しない契約を検証する。
+    # テストケース: workspace.yaml だけを持つ current session fixture を履歴同期 API で同期する。
+    # 期待値: reader が処理対象として数えても DB row は作成せず、警告だけの workspace-only source で同期結果を劣化させないこと。
+    it "does not persist workspace-only current sessions" do
+      with_copilot_history_fixture("current_schema_workspace_only") do |root|
+        ENV["COPILOT_HOME"] = root.to_s
+
+        post "/api/history/sync"
+
+        expect(response).to have_http_status(:ok)
+        payload = JSON.parse(response.body, symbolize_names: true)
+        expect(payload.dig(:data, :sync_run, :status)).to eq("succeeded")
+        expect(payload.dig(:data, :counts)).to include(
+          processed_count: 1,
+          inserted_count: 0,
+          updated_count: 0,
+          saved_count: 0,
+          skipped_count: 0,
+          degraded_count: 0
+        )
+        expect(CopilotSession.where(session_id: "current-schema-workspace-only")).not_to exist
+      end
+    end
+
     # 概要・目的: current session の明示同期で保存された cwd が、そのまま一覧 API の表示 payload と検索根拠になる利用者フローを検証する。
     # テストケース: current と legacy を含む fixture を同期し、DB scalar と summary payload を確認したうえで cwd 断片で一覧検索する。
     # 期待値: current session だけが既存 response shape で返り、cwd がない legacy session には推測値が付かず検索にも一致しないこと。
