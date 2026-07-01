@@ -1,0 +1,356 @@
+name: Dependabot alert notify
+
+on:
+  schedule:
+    - cron: "15 0 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    name: Notify Dependabot alerts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Create issues and Slack notification for new alerts
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          TARGET_SEVERITIES: high,critical
+          STATE_ISSUE_TITLE: "[bot] Dependabot alert notification state"
+          STATE_ISSUE_LABELS: bot,dependabot-alert-state
+          ALERT_ISSUE_LABELS: security,dependabot
+        run: |
+          node <<'NODE'
+          const token = process.env.GH_TOKEN
+          const repository = process.env.GITHUB_REPOSITORY
+          const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL
+          const targetSeverities = new Set(
+            (process.env.TARGET_SEVERITIES || 'high,critical')
+              .split(',')
+              .map((severity) => severity.trim().toLowerCase())
+              .filter(Boolean),
+          )
+          const stateIssueTitle =
+            process.env.STATE_ISSUE_TITLE || '[bot] Dependabot alert notification state'
+          const stateIssueLabels = parseCsv(process.env.STATE_ISSUE_LABELS)
+          const alertIssueLabels = parseCsv(process.env.ALERT_ISSUE_LABELS)
+
+          if (!token) {
+            throw new Error('GH_TOKEN is empty. Check APP_CLIENT_ID and APP_PRIVATE_KEY settings.')
+          }
+          if (!repository) {
+            throw new Error('GITHUB_REPOSITORY is empty.')
+          }
+
+          const [owner, repo] = repository.split('/')
+          const apiBase = 'https://api.github.com'
+
+          main().catch((error) => {
+            console.error(error)
+            process.exit(1)
+          })
+
+          async function main() {
+            console.log(`Checking Dependabot alerts for ${repository}`)
+            console.log(`Target severities: ${Array.from(targetSeverities).join(', ')}`)
+
+            await ensureLabels([
+              ...stateIssueLabels.map((name) => ({ name, color: 'ededed' })),
+              ...alertIssueLabels.map((name) => ({ name, color: 'd73a4a' })),
+              ...Array.from(targetSeverities).map((severity) => ({
+                name: `severity:${severity}`,
+                color: severity === 'critical' ? 'b60205' : 'fbca04',
+              })),
+            ])
+
+            const stateIssue = await findOrCreateStateIssue()
+            const state = parseStateIssueBody(stateIssue.body)
+            const notifiedKeys = new Set((state.notified || []).map((item) => item.key))
+
+            const alerts = await listDependabotAlerts()
+            const targetAlerts = alerts.filter((alert) =>
+              targetSeverities.has(getAlertSeverity(alert).toLowerCase()),
+            )
+            const newAlerts = targetAlerts.filter((alert) => !notifiedKeys.has(alertKey(alert)))
+
+            console.log(`Open alerts: ${alerts.length}`)
+            console.log(`Target alerts: ${targetAlerts.length}`)
+            console.log(`New alerts: ${newAlerts.length}`)
+
+            if (newAlerts.length === 0) {
+              console.log('No new Dependabot alerts to notify.')
+              return
+            }
+
+            const processed = []
+            for (const alert of newAlerts) {
+              const issue = await createAlertIssue(alert)
+              const record = buildStateRecord(alert, issue)
+              processed.push({ alert, issue, record })
+              console.log(`Created issue #${issue.number} for ${record.key}`)
+            }
+
+            const nextState = {
+              version: state.version || 1,
+              notified: [...(state.notified || []), ...processed.map((item) => item.record)],
+            }
+            await updateStateIssue(stateIssue.number, nextState)
+            console.log(`Updated state issue #${stateIssue.number}`)
+
+            await sendSlackNotification(processed)
+          }
+
+          function parseCsv(value) {
+            return (value || '')
+              .split(',')
+              .map((item) => item.trim())
+              .filter(Boolean)
+          }
+
+          async function gh(path, options = {}) {
+            const headers = {
+              Accept: 'application/vnd.github+json',
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              ...(options.headers || {}),
+            }
+            const response = await fetch(`${apiBase}${path}`, { ...options, headers })
+            const bodyText = await response.text()
+            const body = bodyText ? JSON.parse(bodyText) : null
+
+            if (!response.ok) {
+              const message = body?.message || bodyText || response.statusText
+              throw new Error(`GitHub API ${options.method || 'GET'} ${path} failed: ${response.status} ${message}`)
+            }
+
+            return {
+              body,
+              link: response.headers.get('link'),
+            }
+          }
+
+          async function ghPaginate(path) {
+            const results = []
+            let nextPath = path
+
+            while (nextPath) {
+              const response = await gh(nextPath)
+              results.push(...response.body)
+              nextPath = parseNextPath(response.link)
+            }
+
+            return results
+          }
+
+          function parseNextPath(linkHeader) {
+            if (!linkHeader) return null
+
+            const next = linkHeader
+              .split(',')
+              .map((part) => part.trim())
+              .find((part) => part.endsWith('rel="next"'))
+
+            if (!next) return null
+
+            const match = next.match(/<([^>]+)>/)
+            if (!match) return null
+
+            const url = new URL(match[1])
+            return `${url.pathname}${url.search}`
+          }
+
+          async function ensureLabels(labels) {
+            for (const label of labels) {
+              try {
+                await gh(`/repos/${owner}/${repo}/labels/${encodeURIComponent(label.name)}`)
+              } catch (error) {
+                if (!error.message.includes('404')) throw error
+
+                await gh(`/repos/${owner}/${repo}/labels`, {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    name: label.name,
+                    color: label.color,
+                    description: `Created by Dependabot alert notification workflow.`,
+                  }),
+                })
+              }
+            }
+          }
+
+          async function findOrCreateStateIssue() {
+            const issues = await ghPaginate(
+              `/repos/${owner}/${repo}/issues?state=all&labels=${encodeURIComponent('dependabot-alert-state')}&per_page=100`,
+            )
+            const stateIssue = issues.find((issue) => !issue.pull_request && issue.title === stateIssueTitle)
+
+            if (stateIssue) return stateIssue
+
+            const response = await gh(`/repos/${owner}/${repo}/issues`, {
+              method: 'POST',
+              body: JSON.stringify({
+                title: stateIssueTitle,
+                labels: stateIssueLabels,
+                body: JSON.stringify({ version: 1, notified: [] }, null, 2),
+              }),
+            })
+
+            console.log(`Created state issue #${response.body.number}`)
+            return response.body
+          }
+
+          function parseStateIssueBody(body) {
+            if (!body || body.trim() === '') {
+              return { version: 1, notified: [] }
+            }
+
+            const parsed = JSON.parse(body)
+            if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.notified)) {
+              throw new Error('State issue body must be JSON with a notified array.')
+            }
+
+            return parsed
+          }
+
+          async function listDependabotAlerts() {
+            return ghPaginate(`/repos/${owner}/${repo}/dependabot/alerts?state=open&per_page=100`)
+          }
+
+          function alertKey(alert) {
+            return `${repository}#${alert.number}`
+          }
+
+          function getAlertSeverity(alert) {
+            return alert.security_advisory?.severity || 'unknown'
+          }
+
+          function getPackageName(alert) {
+            return alert.dependency?.package?.name || 'unknown-package'
+          }
+
+          function getManifestPath(alert) {
+            return alert.dependency?.manifest_path || 'unknown-manifest'
+          }
+
+          function getGhsaId(alert) {
+            return alert.security_advisory?.ghsa_id || 'N/A'
+          }
+
+          function getCveId(alert) {
+            const cve = (alert.security_advisory?.identifiers || []).find(
+              (identifier) => identifier.type === 'CVE',
+            )
+            return cve?.value || 'N/A'
+          }
+
+          function getAlertUrl(alert) {
+            return alert.html_url || `https://github.com/${repository}/security/dependabot/${alert.number}`
+          }
+
+          async function createAlertIssue(alert) {
+            const severity = getAlertSeverity(alert).toLowerCase()
+            const labels = [...alertIssueLabels, `severity:${severity}`]
+
+            const response = await gh(`/repos/${owner}/${repo}/issues`, {
+              method: 'POST',
+              body: JSON.stringify({
+                title: `[Dependabot][${severity}] ${getPackageName(alert)} in ${repository}`,
+                labels,
+                body: [
+                  '## Dependabot alert',
+                  '',
+                  `- Repository: ${repository}`,
+                  `- Severity: ${severity}`,
+                  `- Package: ${getPackageName(alert)}`,
+                  `- Manifest: ${getManifestPath(alert)}`,
+                  `- Advisory: ${getGhsaId(alert)}`,
+                  `- CVE: ${getCveId(alert)}`,
+                  `- Alert: ${getAlertUrl(alert)}`,
+                  `- Created at: ${alert.created_at || 'N/A'}`,
+                  '',
+                  '## 対応メモ',
+                  '',
+                  '- [ ] 影響範囲を確認する',
+                  '- [ ] 修正版へアップデートする',
+                  '- [ ] テストを実行する',
+                  '- [ ] Dependabot alert が close されたことを確認する',
+                ].join('\n'),
+              }),
+            })
+
+            return response.body
+          }
+
+          function buildStateRecord(alert, issue) {
+            return {
+              key: alertKey(alert),
+              repository,
+              alert_number: alert.number,
+              ghsa_id: getGhsaId(alert),
+              cve_id: getCveId(alert),
+              severity: getAlertSeverity(alert).toLowerCase(),
+              issue_number: issue.number,
+              notified_at: new Date().toISOString(),
+            }
+          }
+
+          async function updateStateIssue(issueNumber, state) {
+            await gh(`/repos/${owner}/${repo}/issues/${issueNumber}`, {
+              method: 'PATCH',
+              body: JSON.stringify({
+                body: JSON.stringify(state, null, 2),
+              }),
+            })
+          }
+
+          async function sendSlackNotification(processed) {
+            if (!slackWebhookUrl) {
+              console.log('::warning::SLACK_WEBHOOK_URL is empty. Skipping Slack notification.')
+              return
+            }
+
+            const text = [
+              `High/Critical Dependabot alerts detected: ${processed.length}`,
+              '',
+              ...processed.flatMap(({ alert, issue }, index) => [
+                `${index + 1}. [${getAlertSeverity(alert).toLowerCase()}] ${getPackageName(alert)}`,
+                `   Repository: ${repository}`,
+                `   Manifest: ${getManifestPath(alert)}`,
+                `   Advisory: ${getGhsaId(alert)}`,
+                `   Issue: ${issue.html_url}`,
+                `   Alert: ${getAlertUrl(alert)}`,
+                '',
+              ]),
+            ].join('\n')
+
+            try {
+              const response = await fetch(slackWebhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+              })
+
+              if (!response.ok) {
+                const body = await response.text()
+                console.log(`::warning::Slack notification failed: ${response.status} ${body}`)
+                return
+              }
+
+              console.log('Slack notification sent.')
+            } catch (error) {
+              console.log(`::warning::Slack notification failed: ${error.message}`)
+            }
+          }
+          NODE
