@@ -445,6 +445,142 @@ High/Critical Dependabot alerts detected: 2
 - Slack の双方向操作
 - アラートの自動 dismiss
 - Dependabot alert 本体への独自ステータス付与
+- AI による影響調査の自動実行
+
+## AI 影響調査の自動化候補
+
+最終目標は、Dependabot alert 検知後に AI が repository 内の利用状況・影響範囲・修正方針を調査し、その結果を Issue に記録すること。
+
+現時点の業務導入前 MVP では、workflow が Dependabot alert ごとに Issue を作成し、人間が必要に応じて Copilot coding agent などへ調査を依頼する運用を想定する。
+
+公式ドキュメント確認時点では、将来の自動化候補は大きく 2 つある。
+
+### 候補 A: Actions から直接 AI 調査を実行する
+
+実現可能性: 可能。ただし実装方式により性質が異なる。
+
+#### A-1. GitHub Actions から Copilot CLI を実行する
+
+GitHub 公式ドキュメントでは、GitHub Actions runner 上で Copilot CLI を install し、`COPILOT_GITHUB_TOKEN` に user token を渡して `copilot -p ... --no-ask-user` を実行する例が示されている。
+
+この方式では、Dependabot alert workflow の中で以下のような処理ができる。
+
+```text
+Dependabot alert 検知
+  -> Issue 作成
+  -> Copilot CLI に「この alert の影響範囲を調査して markdown にまとめる」と依頼
+  -> 生成された markdown を Issue comment または Issue body に追記
+  -> State 更新
+  -> Slack 通知
+```
+
+利点:
+
+- workflow 内で同期的に AI 調査結果を受け取りやすい。
+- 調査結果をそのまま Issue body / comment / Slack 通知に転記しやすい。
+- 既存 workflow の処理順に組み込みやすい。
+
+注意点:
+
+- `GITHUB_TOKEN` や GitHub App installation access token ではなく、Copilot CLI 用に使える user token を secret として用意する必要がある。
+- Copilot 利用権限、課金、組織ポリシー、Actions runner からの実行可否を業務環境で確認する必要がある。
+- AI が repository 内で参照・実行できる範囲を `--allow-tool` で慎重に制限する必要がある。
+- AI 調査を Dependabot alert 件数分だけ実行すると、実行時間・利用量・コストが増えやすい。
+
+#### A-2. Actions から Copilot cloud agent task API を呼ぶ
+
+GitHub 公式ドキュメントでは、REST API で Copilot cloud agent task を開始できる。エンドポイントは以下。
+
+```text
+POST /agents/repos/{owner}/{repo}/tasks
+```
+
+必須 parameter は `prompt`。任意で `base_ref`、`model`、`create_pull_request` を指定できる。
+
+ただし、公式ドキュメントでは agent tasks API は user-to-server token のみ対応で、GitHub App installation access token のような server-to-server token は非対応とされている。
+
+現行 workflow は GitHub App installation access token で Dependabot alerts API と Issues API を操作しているため、この token をそのまま使って Copilot cloud agent task API を呼ぶ設計にはできない。
+
+利点:
+
+- Copilot cloud agent を API 経由で正式に起動できる。
+- 将来的に agent task の一覧取得・状態確認と組み合わせて、調査タスク管理を自動化できる。
+
+注意点:
+
+- public preview の API であり、仕様変更リスクがある。
+- user-to-server token が必要。業務導入では個人 PAT に依存しない認可方式を検討する必要がある。
+- cloud agent は task / session として非同期に動くため、workflow 実行中に「調査結果 markdown」を即時取得して Issue に書き戻す用途では、Copilot CLI 実行より設計が複雑になる可能性がある。
+- `create_pull_request` を使う場合、調査だけでなく branch / pull request 作成まで進む可能性があるため、脆弱性調査用途では prompt と設定を慎重に設計する必要がある。
+
+### 候補 B: Issue 登録をトリガーに Copilot coding agent を呼び出す
+
+実現可能性: 可能。公式ドキュメントでは、Issue 作成時または既存 Issue 更新時に `copilot-swe-agent[bot]` を assignee にし、`agent_assignment` を付ける REST API 例が示されている。
+
+Issue 作成時の概念例:
+
+```json
+{
+  "title": "Issue title",
+  "body": "Issue description.",
+  "assignees": ["copilot-swe-agent[bot]"],
+  "agent_assignment": {
+    "target_repo": "OWNER/REPO",
+    "base_branch": "main",
+    "custom_instructions": "",
+    "custom_agent": "",
+    "model": ""
+  }
+}
+```
+
+既存 Issue に後から assignee を追加する API も用意されている。
+
+この方式では、既存 workflow を以下のように拡張できる。
+
+```text
+Dependabot alert 検知
+  -> Issue 作成
+  -> Issue に Copilot coding agent を assign
+  -> Copilot が影響調査または修正作業を実行
+  -> 人間が agent の出力・PR・コメントを確認
+```
+
+利点:
+
+- 現行の「Issue 登録」中心の運用を保ったまま拡張できる。
+- Issue 自体が依頼文・Dependabot alert 情報・調査結果の集約点になる。
+- 人間が手動 assign している運用を API assign に置き換えやすい。
+- `agent_assignment.custom_instructions` に、影響調査観点や期待する出力形式を渡せる。
+
+注意点:
+
+- こちらも user token が必要。公式ドキュメントでは personal access token または GitHub App user-to-server token が例示されている。
+- fine-grained PAT を使う場合は、metadata read と actions / contents / issues / pull requests の read/write が必要。
+- Copilot cloud agent が repository で有効かどうかを、GraphQL の `suggestedActors(capabilities: [CAN_BE_ASSIGNED])` に `copilot-swe-agent` が含まれるかで確認する必要がある。
+- agent は Issue の assignee として動くため、調査結果がどの artifact に残るか（Issue comment、branch、PR、session log）は運用検証が必要。
+- 調査だけを依頼したい場合でも、agent が修正 branch / PR 作成に進む可能性があるため、Issue body と `custom_instructions` で「まず影響調査結果を Issue にコメントし、人間承認前に修正しない」などの制約を明記する必要がある。
+
+### 現時点の推奨方針
+
+業務導入前の次段階としては、候補 B を優先する。
+
+理由:
+
+- 現行 workflow の自然な延長で、Issue 作成後の手動 assign を自動 assign に置き換えられる。
+- Dependabot alert ごとの追跡単位が Issue に残る。
+- 人間レビューの gate を残しやすい。
+
+一方で、「AI 調査結果を workflow 内で同期的に受け取り、そのまま Issue に追記する」ことを重視する場合は、候補 A-1 の Copilot CLI on Actions が適している可能性がある。
+
+業務導入に向けて追加検証すべき点:
+
+- 業務 organization で Copilot cloud agent が有効化できるか。
+- `copilot-swe-agent[bot]` が対象 repository の assignable actor として取得できるか。
+- user token をどう管理するか。個人 PAT ではなく、GitHub App user-to-server token や専用 bot account などを検討する。
+- agent に渡す prompt / custom instructions の標準文面。
+- agent が作成する branch / PR / comment / session log の実際の挙動。
+- Dependabot alert 1 件あたりの実行時間、利用量、料金、失敗時の再実行ルール。
 
 ## 将来拡張
 
@@ -457,6 +593,9 @@ High/Critical Dependabot alerts detected: 2
 - GitHub App の対象 repository 追加・削除フロー整備
 - 対応期限や担当者の自動設定
 - 対応済み Issue と Dependabot alert close 状態の同期
+- Copilot coding agent への自動 assign
+- Copilot CLI on Actions による影響調査 comment の自動追記
+- Copilot cloud agent task API による非同期調査 task の作成・状態追跡
 - 月次レポート作成
 
 ## 参考ドキュメント
@@ -470,3 +609,7 @@ High/Critical Dependabot alerts detected: 2
 - actions/create-github-app-token: https://github.com/actions/create-github-app-token
 - Dependabot alerts REST API: https://docs.github.com/en/rest/dependabot/alerts
 - Slack Incoming Webhooks: https://api.slack.com/messaging/webhooks
+- GitHub Copilot cloud agent: https://docs.github.com/en/copilot/concepts/agents/cloud-agent/about-cloud-agent
+- Kick off a task with Copilot agents on GitHub: https://docs.github.com/en/copilot/how-tos/copilot-on-github/use-copilot-agents/kick-off-a-task
+- Using Copilot cloud agent via the API: https://docs.github.com/en/copilot/how-tos/use-copilot-agents/cloud-agent/use-cloud-agent-via-the-api
+- Automating tasks with Copilot CLI and GitHub Actions: https://docs.github.com/en/copilot/how-tos/copilot-cli/automate-copilot-cli/automate-with-actions
