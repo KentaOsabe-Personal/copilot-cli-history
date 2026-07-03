@@ -14,16 +14,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.APP_CLIENT_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
       - name: Create issues and Slack notification for new alerts
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.DEPENDABOT_ALERT_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           TARGET_SEVERITIES: high,critical
@@ -47,7 +40,7 @@ jobs:
           const alertIssueLabels = parseCsv(process.env.ALERT_ISSUE_LABELS)
 
           if (!token) {
-            throw new Error('GH_TOKEN is empty. Check APP_CLIENT_ID and APP_PRIVATE_KEY settings.')
+            throw new Error('GH_TOKEN is empty. Check DEPENDABOT_ALERT_PAT secret settings.')
           }
           if (!repository) {
             throw new Error('GITHUB_REPOSITORY is empty.')

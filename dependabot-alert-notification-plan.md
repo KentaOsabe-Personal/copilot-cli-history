@@ -55,7 +55,7 @@ on:
 
 | Secret 名 | 用途 |
 | --- | --- |
-| `APP_PRIVATE_KEY` | GitHub App の private key。installation access token 発行に使う |
+| `DEPENDABOT_ALERT_PAT` | チーム共通 GitHub アカウントで発行した PAT。Dependabot alerts API と Issues API の操作に使う |
 | `SLACK_WEBHOOK_URL` | Slack Incoming Webhook URL |
 
 登録先:
@@ -73,42 +73,29 @@ Environment secrets ではなく Repository secrets に登録する。
 
 ## 必要な Variables
 
-| Variable 名 | 用途 |
-| --- | --- |
-| `APP_CLIENT_ID` | GitHub App の Client ID。`actions/create-github-app-token` で使う |
+現時点では必須の GitHub Actions variables はない。
 
-登録先:
+対象 Severity や監視対象 repository を workflow 外から変更したくなった場合に、必要に応じて Repository variables を追加する。
 
-```text
-Repository Settings
-  -> Secrets and variables
-  -> Actions
-  -> Variables タブ
-  -> Repository variables
-  -> New repository variable
-```
+## PAT 認証方針
 
-Environment variables ではなく Repository variables に登録する。
+業務・チーム利用では管理の容易さを優先し、チーム共通の GitHub アカウントを作成して、そのアカウントで発行した PAT を使う。
 
-## GitHub App 方針
-
-業務・チーム利用を最終目的とするため、MVP 段階から GitHub App を使う。
-
-GitHub Actions 内で GitHub App の installation access token を発行し、その token を `GH_TOKEN` として GitHub CLI / REST API に渡す。
+GitHub Actions では Repository secret に保存した PAT を `GH_TOKEN` として GitHub CLI / REST API に渡す。
 
 ```text
 GitHub Actions
-  -> APP_CLIENT_ID と APP_PRIVATE_KEY から installation access token を発行
+  -> DEPENDABOT_ALERT_PAT を GH_TOKEN として設定
   -> Dependabot alerts API を参照
   -> GitHub Issue を作成・更新
   -> State 管理用 Issue を更新
 ```
 
-Fine-grained PAT より初期設定は増えるが、対象 repository と権限を明確に制限でき、個人 token に依存しないためチーム運用に向いている。
+PAT はチーム共通アカウントに紐づくため、個人の退職・異動・権限変更に左右されにくい。一方で長期利用される secret になるため、権限を最小化し、失効日・ローテーション・保管先を明確にする。
 
-## GitHub App の権限
+## PAT の権限
 
-必要な repository permissions の目安:
+Fine-grained PAT を優先する。対象 repository は必要最小限に限定する。
 
 | 権限 | 用途 |
 | --- | --- |
@@ -118,33 +105,44 @@ Fine-grained PAT より初期設定は増えるが、対象 repository と権限
 
 注意点:
 
-- private key は workflow YAML に直書きしない。
-- `APP_PRIVATE_KEY` は GitHub repository secrets または organization secrets に保存する。
-- `APP_CLIENT_ID` は GitHub repository variables または organization variables に保存する。
-- GitHub App は対象 repository のみに install する。
-- Webhook は今回の仕組みでは使わないため、GitHub App 作成時に Active を無効化してよい。
-- 複数 repository / organization に展開する場合は、GitHub App の install 対象と repository access を慎重に管理する。
+- PAT は workflow YAML に直書きしない。
+- `DEPENDABOT_ALERT_PAT` は GitHub repository secrets または organization secrets に保存する。
+- チーム共通アカウントは対象 repository へ必要な権限で参加させる。
+- Fine-grained PAT では対象 repository を明示的に選択し、不要な repository への access を付けない。
+- Expiration は無期限にせず、運用可能な範囲で期限を設定する。
+- token を漏らした可能性がある場合は即時 revoke し、再発行して secret を更新する。
+- 複数 repository / organization に展開する場合は、PAT の repository access とチーム共通アカウントの所属・権限を慎重に管理する。
 
-## GitHub App の導入・設定手順
+## PAT の導入・設定手順
 
-### 1. GitHub App を作成する
+### 1. チーム共通 GitHub アカウントを用意する
 
-個人検証では個人アカウント配下、本番では organization 配下に GitHub App を作成する。
+業務利用では個人アカウントではなく、チームで管理する GitHub アカウントを用意する。
+
+手順:
+
+1. チーム共通の GitHub アカウントを作成する。
+2. 2FA や recovery code の管理方法をチーム内で決める。
+3. 対象 repository または organization にアカウントを追加する。
+4. Dependabot alerts の参照と Issue 作成・更新ができる権限を付与する。
+5. アカウントの用途、管理者、token ローテーション周期を記録する。
+
+### 2. Fine-grained PAT を発行する
+
+チーム共通アカウントの Settings から fine-grained PAT を発行する。
 
 手順:
 
 1. GitHub の右上アイコンから Settings に移動する。
 2. 左メニューの Developer settings を開く。
-3. GitHub Apps を開く。
-4. New GitHub App を選択する。
-5. GitHub App name を入力する。
-6. Homepage URL を入力する。専用サイトがなければ対象 repository URL や organization URL でよい。
-7. Webhook は使わないため、Active のチェックを外す。
-8. Repository permissions を設定する。
-9. Where can this GitHub App be installed? は、個人検証なら `Only on this account`、将来他 organization にも入れる可能性があるなら `Any account` を選ぶ。
-10. Create GitHub App を押す。
-
-### 2. GitHub App の権限を設定する
+3. Personal access tokens を開く。
+4. Fine-grained tokens を開く。
+5. Generate new token を選択する。
+6. Token name を入力する。
+7. Expiration を設定する。
+8. Repository access で対象 repository のみを選択する。
+9. Repository permissions を設定する。
+10. Generate token を押す。
 
 Repository permissions:
 
@@ -156,15 +154,14 @@ Repository permissions:
 
 補足:
 
-- `Metadata: read` は GitHub App に通常付与される基本権限。
-- Dependabot alerts API は GitHub App installation access token に対応している。
+- `Metadata: read` は fine-grained PAT に通常付与される基本権限。
+- Dependabot alerts API は fine-grained PAT に対応している。
 - Issue 登録と State 管理用 Issue 更新のため、Issues は read/write が必要。
+- Classic PAT を使う場合は `security_events` scope と Issue 操作用の scope が必要になるため、原則として fine-grained PAT を使う。
 
-### 3. Private key を発行する
+### 3. PAT を secret に登録する
 
-GitHub App の設定画面で private key を generate し、`.pem` ファイルをダウンロードする。
-
-ダウンロードした private key の内容全体を GitHub Actions secret に保存する。
+発行した PAT を GitHub Actions secret に保存する。
 
 登録先:
 
@@ -179,80 +176,31 @@ GitHub App の設定画面で private key を generate し、`.pem` ファイル
 ```
 
 ```text
-Secret name: APP_PRIVATE_KEY
-Secret value:
------BEGIN RSA PRIVATE KEY-----
-...
------END RSA PRIVATE KEY-----
+Secret name: DEPENDABOT_ALERT_PAT
+Secret value: github_pat_xxxxxxxxxxxxxxxxxxxx
 ```
 
 注意点:
 
-- `BEGIN` / `END` 行を含めて保存する。
-- `.pem` ファイルをアップロードするのではなく、テキストエディタで開いて中身をすべてコピーして貼り付ける。
 - 登録先は Environment secrets ではなく Repository secrets。
-- private key は repository に commit しない。
-- key を漏らした可能性がある場合は GitHub App の設定画面で削除し、再発行する。
+- PAT は repository に commit しない。
+- PAT の値は発行直後しか表示されないため、登録後は再表示できない。
+- token を漏らした可能性がある場合は GitHub の token 設定画面で revoke し、再発行する。
+- ローテーション時は新 token を発行し、`DEPENDABOT_ALERT_PAT` secret を更新してから旧 token を revoke する。
 
-### 4. Client ID を登録する
+### 4. Actions で PAT を使う
 
-GitHub App の設定画面に表示される Client ID を GitHub Actions variable に保存する。
-
-登録先:
-
-```text
-対象 repository
-  -> Settings
-  -> Secrets and variables
-  -> Actions
-  -> Variables タブ
-  -> Repository variables
-  -> New repository variable
-```
-
-```text
-Variable name: APP_CLIENT_ID
-Variable value: Iv1.xxxxxxxxxxxxxxxx
-```
-
-補足:
-
-- 登録先は Environment variables ではなく Repository variables。
-- `APP_CLIENT_ID` は機密情報ではないため、secret ではなく variable にする。
-- `actions/create-github-app-token@v3` では `client-id` が推奨される。
-- legacy input として `app-id` も使えるが、資料では `client-id` に統一する。
-
-### 5. GitHub App を repository に install する
-
-GitHub App の設定画面から Install App を選択し、対象アカウントまたは organization に install する。
-
-個人検証では対象 repository のみを選択する。
-
-```text
-Repository access: Only select repositories
-Selected repositories: 対象 repository
-```
-
-### 6. Actions で installation access token を発行する
-
-workflow 内で `actions/create-github-app-token` を使い、短命の installation access token を発行する。
+workflow 内で `DEPENDABOT_ALERT_PAT` を `GH_TOKEN` に渡す。
 
 ```yaml
-- name: Generate GitHub App token
-  id: app-token
-  uses: actions/create-github-app-token@v3
-  with:
-    client-id: ${{ vars.APP_CLIENT_ID }}
-    private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-- name: Use GitHub App token
+- name: Use team PAT
   env:
-    GH_TOKEN: ${{ steps.app-token.outputs.token }}
+    GH_TOKEN: ${{ secrets.DEPENDABOT_ALERT_PAT }}
   run: |
     gh api "/repos/${{ github.repository }}/dependabot/alerts?state=open"
 ```
 
-複数 repository を対象にする場合は、`owner` や `repositories` の指定を検討する。
+複数 repository を対象にする場合は、PAT の repository access と workflow 側の対象 repository 一覧を一致させる。
 
 ## State 管理用 Issue
 
@@ -371,20 +319,19 @@ High/Critical Dependabot alerts detected: 2
 ## 処理フロー詳細
 
 1. workflow を起動する。
-2. `APP_CLIENT_ID` と `APP_PRIVATE_KEY` で GitHub App の installation access token を発行する。
-3. 発行した token を `GH_TOKEN` として GitHub API / GitHub CLI に渡す。
-4. State 管理用 Issue を検索する。
-5. State 管理用 Issue がなければ新規作成する。
-6. State 管理用 Issue の本文 JSON を読み込む。
-7. Dependabot alerts API で open alerts を取得する。
-8. 対象 Severity の alert のみに絞り込む。
-9. `owner/repo#alert_number` が State に存在する alert を除外する。
-10. 未通知 alert が 0 件なら終了する。
-11. 未通知 alert ごとに GitHub Issue を作成する。
-12. Issue 作成に成功した alert を State に追記する。
-13. State 管理用 Issue の本文を更新する。
-14. Issue 作成と State 更新が完了した alert を Slack に通知する。
-15. Slack 通知に失敗しても、Issue 作成と State 更新が完了していれば処理成功として扱う。
+2. `DEPENDABOT_ALERT_PAT` を `GH_TOKEN` として GitHub API / GitHub CLI に渡す。
+3. State 管理用 Issue を検索する。
+4. State 管理用 Issue がなければ新規作成する。
+5. State 管理用 Issue の本文 JSON を読み込む。
+6. Dependabot alerts API で open alerts を取得する。
+7. 対象 Severity の alert のみに絞り込む。
+8. `owner/repo#alert_number` が State に存在する alert を除外する。
+9. 未通知 alert が 0 件なら終了する。
+10. 未通知 alert ごとに GitHub Issue を作成する。
+11. Issue 作成に成功した alert を State に追記する。
+12. State 管理用 Issue の本文を更新する。
+13. Issue 作成と State 更新が完了した alert を Slack に通知する。
+14. Slack 通知に失敗しても、Issue 作成と State 更新が完了していれば処理成功として扱う。
 
 ## エラーハンドリング方針
 
@@ -416,12 +363,12 @@ High/Critical Dependabot alerts detected: 2
 
 1. Slack Incoming Webhook URL を発行する。
 2. GitHub repository secret に `SLACK_WEBHOOK_URL` を登録する。
-3. GitHub App を作成する。
-4. GitHub App に必要な repository permissions を設定する。
-5. GitHub App の private key を発行する。
-6. GitHub repository secret に `APP_PRIVATE_KEY` を登録する。
-7. GitHub repository variable に `APP_CLIENT_ID` を登録する。
-8. GitHub App を対象 repository に install する。
+3. チーム共通 GitHub アカウントを作成または確認する。
+4. チーム共通 GitHub アカウントを対象 repository に追加する。
+5. チーム共通 GitHub アカウントで fine-grained PAT を発行する。
+6. PAT に必要な repository permissions を設定する。
+7. GitHub repository secret に `DEPENDABOT_ALERT_PAT` を登録する。
+8. PAT の失効日・管理者・ローテーション周期を記録する。
 9. State 管理用 Issue を作成する、または workflow 初回実行時に自動作成する。
 10. `.github/workflows/dependabot-alert-notify.yml` を作成する。
 11. `workflow_dispatch` で手動実行して検証する。
@@ -482,7 +429,8 @@ Dependabot alert 検知
 
 注意点:
 
-- `GITHUB_TOKEN` や GitHub App installation access token ではなく、Copilot CLI 用に使える user token を secret として用意する必要がある。
+- `GITHUB_TOKEN` ではなく、Copilot CLI 用に使える user token を secret として用意する必要がある。
+- 現行方針のチーム共通アカウント PAT を使う場合、そのアカウントに Copilot 利用権限が必要になる可能性がある。
 - Copilot 利用権限、課金、組織ポリシー、Actions runner からの実行可否を業務環境で確認する必要がある。
 - AI が repository 内で参照・実行できる範囲を `--allow-tool` で慎重に制限する必要がある。
 - AI 調査を Dependabot alert 件数分だけ実行すると、実行時間・利用量・コストが増えやすい。
@@ -497,9 +445,9 @@ POST /agents/repos/{owner}/{repo}/tasks
 
 必須 parameter は `prompt`。任意で `base_ref`、`model`、`create_pull_request` を指定できる。
 
-ただし、公式ドキュメントでは agent tasks API は user-to-server token のみ対応で、GitHub App installation access token のような server-to-server token は非対応とされている。
+ただし、公式ドキュメントでは agent tasks API は user-to-server token のみ対応で、server-to-server token は非対応とされている。
 
-現行 workflow は GitHub App installation access token で Dependabot alerts API と Issues API を操作しているため、この token をそのまま使って Copilot cloud agent task API を呼ぶ設計にはできない。
+現行 workflow はチーム共通アカウントの PAT で Dependabot alerts API と Issues API を操作する方針のため、Copilot cloud agent task API でも同じ PAT を使える可能性がある。ただし、チーム共通アカウントに Copilot 利用権限があること、対象 repository で Copilot cloud agent が有効であること、PAT の権限が agent task 作成に足りることを別途検証する必要がある。
 
 利点:
 
@@ -509,7 +457,7 @@ POST /agents/repos/{owner}/{repo}/tasks
 注意点:
 
 - public preview の API であり、仕様変更リスクがある。
-- user-to-server token が必要。業務導入では個人 PAT に依存しない認可方式を検討する必要がある。
+- user-to-server token が必要。業務導入では、チーム共通アカウントの PAT で運用できるか、権限・ライセンス・監査上の扱いを確認する必要がある。
 - cloud agent は task / session として非同期に動くため、workflow 実行中に「調査結果 markdown」を即時取得して Issue に書き戻す用途では、Copilot CLI 実行より設計が複雑になる可能性がある。
 - `create_pull_request` を使う場合、調査だけでなく branch / pull request 作成まで進む可能性があるため、脆弱性調査用途では prompt と設定を慎重に設計する必要がある。
 
@@ -555,8 +503,8 @@ Dependabot alert 検知
 
 注意点:
 
-- こちらも user token が必要。公式ドキュメントでは personal access token または GitHub App user-to-server token が例示されている。
-- fine-grained PAT を使う場合は、metadata read と actions / contents / issues / pull requests の read/write が必要。
+- こちらも user token が必要。現行方針では、チーム共通アカウントの PAT を使えるかを検証する。
+- fine-grained PAT を使う場合は、metadata read と actions / contents / issues / pull requests の read/write が必要になる可能性がある。
 - Copilot cloud agent が repository で有効かどうかを、GraphQL の `suggestedActors(capabilities: [CAN_BE_ASSIGNED])` に `copilot-swe-agent` が含まれるかで確認する必要がある。
 - agent は Issue の assignee として動くため、調査結果がどの artifact に残るか（Issue comment、branch、PR、session log）は運用検証が必要。
 - 調査だけを依頼したい場合でも、agent が修正 branch / PR 作成に進む可能性があるため、Issue body と `custom_instructions` で「まず影響調査結果を Issue にコメントし、人間承認前に修正しない」などの制約を明記する必要がある。
@@ -577,7 +525,8 @@ Dependabot alert 検知
 
 - 業務 organization で Copilot cloud agent が有効化できるか。
 - `copilot-swe-agent[bot]` が対象 repository の assignable actor として取得できるか。
-- user token をどう管理するか。個人 PAT ではなく、GitHub App user-to-server token や専用 bot account などを検討する。
+- チーム共通アカウントの PAT で Copilot cloud agent / Copilot CLI 連携まで扱えるか。
+- PAT の失効・ローテーション・監査ログ確認・権限棚卸しの運用。
 - agent に渡す prompt / custom instructions の標準文面。
 - agent が作成する branch / PR / comment / session log の実際の挙動。
 - Dependabot alert 1 件あたりの実行時間、利用量、料金、失敗時の再実行ルール。
@@ -589,8 +538,9 @@ Dependabot alert 検知
 - severity のしきい値を workflow input で変更
 - Slack メンション先を severity ごとに変更
 - 既存 Issue 検索による二重 Issue 作成防止
-- GitHub App の organization 配下への移管
-- GitHub App の対象 repository 追加・削除フロー整備
+- チーム共通アカウントの organization 配下での権限管理
+- PAT の対象 repository 追加・削除フロー整備
+- PAT の定期ローテーションと権限棚卸し
 - 対応期限や担当者の自動設定
 - 対応済み Issue と Dependabot alert close 状態の同期
 - Copilot coding agent への自動 assign
@@ -602,11 +552,8 @@ Dependabot alert 検知
 
 - GitHub Actions workflow triggers: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
 - GitHub Actions secrets: https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets
-- Registering a GitHub App: https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app
-- GitHub App permissions: https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app
-- Installing your own GitHub App: https://docs.github.com/en/apps/using-github-apps/installing-your-own-github-app
-- GitHub App authentication in Actions: https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/making-authenticated-api-requests-with-a-github-app-in-a-github-actions-workflow
-- actions/create-github-app-token: https://github.com/actions/create-github-app-token
+- Managing your personal access tokens: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens
+- Permissions required for fine-grained personal access tokens: https://docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens
 - Dependabot alerts REST API: https://docs.github.com/en/rest/dependabot/alerts
 - Slack Incoming Webhooks: https://api.slack.com/messaging/webhooks
 - GitHub Copilot cloud agent: https://docs.github.com/en/copilot/concepts/agents/cloud-agent/about-cloud-agent
